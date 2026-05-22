@@ -1,17 +1,17 @@
 #!/usr/bin/env Rscript
 
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager", repos="http://cran.r-project.org")
-}
+# if (!requireNamespace("BiocManager", quietly = TRUE)) {
+#   install.packages("BiocManager", repos="http://cran.r-project.org")
+# }
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(vroom))
-suppressPackageStartupMessages(library(devtools))
-suppressPackageStartupMessages(library(ggplot2))
-suppressPackageStartupMessages(library(stringr))
+# suppressPackageStartupMessages(library(devtools))
+# suppressPackageStartupMessages(library(ggplot2))
+# suppressPackageStartupMessages(library(stringr))
 suppressPackageStartupMessages(library(GenomicRanges))
 suppressPackageStartupMessages(library(VariantAnnotation))
-suppressPackageStartupMessages(library(mobster))
+# suppressPackageStartupMessages(library(mobster))
 
 args = commandArgs(trailingOnly=TRUE)
 FFPE <- args[1]
@@ -33,23 +33,23 @@ as_tibble()
         
 fit <- vcf_data %>%
     dplyr::filter(VAF >= 0.05 & VAF < 1) %>%
-    mobster_fit(
-    .,   
-    K = c(1,2,3), 
-    samples = 1, 
-    init = 'random',
-    tail = TRUE,
-    epsilon = 1e-06,
-    maxIter = 100, 
-    fit.type = 'MM', 
-    seed = 12345,
-    model.selection = 'reICL',
-    trace = FALSE,
-    parallel = FALSE,
-    pi_cutoff = 0.02,
-    N_cutoff = 10,
-    silent=FALSE
-)
+    mobster::mobster_fit(
+        .,   
+        K = c(1,2,3), 
+        samples = 1, 
+        init = 'random',
+        tail = TRUE,
+        epsilon = 1e-06,
+        maxIter = 100, 
+        fit.type = 'MM', 
+        seed = 12345,
+        model.selection = 'reICL',
+        trace = FALSE,
+        parallel = FALSE,
+        pi_cutoff = 0.02,
+        N_cutoff = 10,
+        silent=FALSE
+    )
 
 sample_data <- vcf_data %>%
     dplyr::left_join(Clusters(fit$best), by=c('chrom', 'pos', 'REF', 'ALT')) %>% 
