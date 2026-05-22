@@ -50,7 +50,7 @@ task Extraction {
         vcf="~{vcf.vcf}"
         referenceFa="~{referenceFa.fasta}"
         # Extract features for the EBM model. This script also extracts the reference sequence context for each variant, which is used in the mutational signature analysis.
-        python3 fifa \
+        fifa \
             extract \
             -s ${sampleId} \
             -c ${projectId} \
@@ -71,7 +71,7 @@ task Extraction {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:363b97fcd9896b4c89ce1fe05df8f7a60ed60dbd61588e905333c432d4555ea2"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:cc013f61e319445203d727bf7efa9d1ddc0f658eb65e7e74f335db45e79619de"
         runtime_minutes: "6000"
         partition: "cpu"
         qos: qos
