@@ -35,7 +35,7 @@ task Extraction {
         IndexedReference referenceFa
         String extractedFeaturesPath = "~{sampleId}_extracted_features.csv"
         # resources
-        Int threads = 2
+        Int threads = 4
         Int runRequestThreads =  ceil(threads / 2.0)
         Int memoryGb = 4
         Int diskSize
@@ -48,17 +48,18 @@ task Extraction {
         sampleId="~{sampleId}"
         projectId="~{projectId}"
         vcf="~{vcf.vcf}"
+        threads="~{threads}"
         referenceFa="~{referenceFa.fasta}"
         # Extract features for the EBM model. This script also extracts the reference sequence context for each variant, which is used in the mutational signature analysis.
         fifa \
             extract \
             -s ${sampleId} \
             -c ${projectId} \
-            -v ${vcff} \
+            -v ${vcf} \
             -b ${bam} \
             -r ${referenceFa} \
             -o . \
-            -n 2
+            -n ${threads}
     >>>
 
     output {
@@ -73,6 +74,49 @@ task Extraction {
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:cc013f61e319445203d727bf7efa9d1ddc0f658eb65e7e74f335db45e79619de"
         runtime_minutes: "6000"
+        partition: "cpu"
+        qos: qos
+    }
+}    
+
+task Merge {
+    input {
+        Array[File] pickles
+        String mergedModelId
+        String modelPath = "~{mergedModelId}_extracted_features.csv"
+        # resources
+        Int threads = 1
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 4
+        Int diskSize = 20
+        String qos = "compbio"
+        String partition = "cpu"
+
+    }
+    command <<<
+        set -e -o pipefail
+        mergedModelId="~{mergedModelId}"
+        modelPath="~{modelPath}"
+        all_pickles=~{sep=' ' pickles}
+        # Extract features for the EBM model. This script also extracts the reference sequence context for each variant, which is used in the mutational signature analysis.
+        fifa \
+            merge \
+            -m ${all_pickles} \
+            -o ${modelPath}
+    >>>
+
+    output {
+        File model = modelPath
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " LOCAL"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:cc013f61e319445203d727bf7efa9d1ddc0f658eb65e7e74f335db45e79619de"
+        runtime_minutes: "300"
         partition: "cpu"
         qos: qos
     }
