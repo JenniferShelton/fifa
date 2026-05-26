@@ -35,9 +35,12 @@ workflow ExtractionWkf {
         String projectId
         IndexedVcf vcf
         IndexedReference referenceFa
+        File? optionalRnaFile
+        Array[File] models
         # resources
         String qos = "compbio"
         String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
     }
     Int diskSize = ceil(size(bam.bam, "GB")) * 3
     call fifa.Extraction {
@@ -49,10 +52,33 @@ workflow ExtractionWkf {
             referenceFa = referenceFa,
             diskSize = diskSize,
             qos = qos,
-            partition = partition
+            partition = partition,
+            cpuPlatform = cpuPlatform
     }
 
+    if (defined(optionalRnaFile)) {
+        call fifa.PredictionWithRna {
+            input:
+                sampleId = sampleId,
+                vcf = vcf,
+                extractedFeatures = Extraction.extractedFeatures,
+                models = models,
+                optionalRnaFile = optionalRnaFile
+        }
+    }
+
+    if (!defined(optionalRnaFile)) {
+        call fifa.Prediction {
+            input:
+                sampleId = sampleId,
+                vcf = vcf,
+                extractedFeatures = Extraction.extractedFeatures,
+                models = models
+        }
+    }
+    File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])
     output {
         File extractedFeatures = Extraction.extractedFeatures
+        File fifaVcf = fifaVcfRun
     }
 }

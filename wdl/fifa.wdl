@@ -41,6 +41,7 @@ task Extraction {
         Int diskSize
         String qos = "compbio"
         String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
 
     }
     command <<<
@@ -70,14 +71,105 @@ task Extraction {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " LOCAL"
+        disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:cc013f61e319445203d727bf7efa9d1ddc0f658eb65e7e74f335db45e79619de"
         runtime_minutes: "6000"
+        cpuPlatform : cpuPlatform
         partition: "cpu"
         qos: qos
     }
-}    
+}
+
+task Prediction {
+    input {
+        String sampleId
+        IndexedVcf vcf
+        File extractedFeatures
+        String fifaVcfPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.vcf")
+        Array[File] models
+        # resources
+        Int threads = 4
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 4
+        Int diskSize = 20
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+    }
+
+    command <<<
+        set -e -o pipefail
+        sampleId="~{sampleId}"
+        vcf="~{vcf.vcf}"
+        extractedFeatures="~{extractedFeatures}"
+        all_models=~{sep=' ' models}
+        fifa \
+            predict \
+            -s ${sampleId} \
+            -v ${vcf} \
+            -f ${extractedFeatures} \
+            -o . \
+            -m ${all_models}
+    >>>
+
+    output {
+        File fifaVcf= fifaVcfPath
+    }
+}
+
+task PredictionWithRna {
+    input {
+        String sampleId
+        IndexedVcf vcf
+        File extractedFeatures
+        String fifaVcfPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.vcf")
+        Array[File] models
+        File? optionalRnaFile
+        # resources
+        Int threads = 4
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 4
+        Int diskSize = 20
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+    }
+
+    command <<<
+        set -e -o pipefail
+        sampleId="~{sampleId}"
+        vcf="~{vcf.vcf}"
+        extractedFeatures="~{extractedFeatures}"
+        all_models=~{sep=' ' models}
+        all_rna=~{sep=' ' optionalRnaFile}
+        fifa \
+            predict \
+            -s ${sampleId} \
+            -v ${vcf} \
+            -f ${extractedFeatures} \
+            -o . \
+            -m ${all_models} \
+            -r ${all_rna}
+    >>>
+
+    output {
+        File fifaVcf= fifaVcfPath
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " HDD"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:cc013f61e319445203d727bf7efa9d1ddc0f658eb65e7e74f335db45e79619de"
+        runtime_minutes: "6000"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}  
 
 task Merge {
     input {
@@ -91,6 +183,7 @@ task Merge {
         Int diskSize = 20
         String qos = "compbio"
         String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
 
     }
     command <<<
@@ -98,7 +191,6 @@ task Merge {
         mergedModelId="~{mergedModelId}"
         modelPath="~{modelPath}"
         all_pickles=~{sep=' ' pickles}
-        # Extract features for the EBM model. This script also extracts the reference sequence context for each variant, which is used in the mutational signature analysis.
         fifa \
             merge \
             -m ${all_pickles} \
@@ -113,11 +205,12 @@ task Merge {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " LOCAL"
+        disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:cc013f61e319445203d727bf7efa9d1ddc0f658eb65e7e74f335db45e79619de"
         runtime_minutes: "300"
         partition: "cpu"
+        cpuPlatform : cpuPlatform
         qos: qos
     }
 }    

@@ -35,24 +35,49 @@ workflow ExtractionWkfs {
         String projectId
         Array[IndexedVcf] vcfs
         IndexedReference referenceFa
+        Array[File]? optionalRnaFiles
+        Array[File] models
         # resources
         String qos = "compbio"
         String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
     }
-  
+    Array[File] rnaFiles = select_first([optionalRnaFiles, []])
     scatter (i in range(length(bams))) {
-        call extractionWkf.ExtractionWkf {
-            input:
-                bam = bams[i],
-                sampleId = sampleIds[i],
-                projectId = projectId,
-                vcf = vcfs[i],
-                referenceFa = referenceFa,
-                qos = qos,
-                partition = partition
+        if (defined(optionalRnaFiles)) {
+            call extractionWkf.ExtractionWkf as rnaExtractionWkf {
+                input:
+                    bam = bams[i],
+                    sampleId = sampleIds[i],
+                    projectId = projectId,
+                    vcf = vcfs[i],
+                    optionalRnaFile = rnaFiles[i],
+                    models = models,
+                    referenceFa = referenceFa,
+                    qos = qos,
+                    partition = partition,
+                    cpuPlatform = cpuPlatform
+            }
         }
+        if (!defined(optionalRnaFiles)) {
+            call extractionWkf.ExtractionWkf {
+                input:
+                    bam = bams[i],
+                    sampleId = sampleIds[i],
+                    projectId = projectId,
+                    vcf = vcfs[i],
+                    models = models,
+                    referenceFa = referenceFa,
+                    qos = qos,
+                    partition = partition,
+                    cpuPlatform = cpuPlatform
+            }
+        }
+        File extractedFeaturesRun = select_first([rnaExtractionWkf.extractedFeatures, ExtractionWkf.extractedFeatures])
+        File fifaVcfRun = select_first([rnaExtractionWkf.fifaVcf, ExtractionWkf.fifaVcf])
     }
     output {
-        Array[File] extractedFeatures = ExtractionWkf.extractedFeatures
+        Array[File] extractedFeatures = extractedFeaturesRun
+        Array[File] fifaVcf = fifaVcfRun
     }
 }

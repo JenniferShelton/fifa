@@ -35,13 +35,15 @@ workflow MergingWkf {
         # resources
         String qos = "compbio"
         String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
     }
     call fifa.Merge {
         input:
             pickles = pickles,
             mergedModelId = mergedModelId,
             qos = qos,
-            partition = partition
+            partition = partition,
+            cpuPlatform = cpuPlatform
     }
 
     output {

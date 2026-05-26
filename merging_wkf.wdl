@@ -35,6 +35,7 @@ workflow MergeWkfs {
         # resources
         String qos = "compbio"
         String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
     }
   
     call mergingWkf.MergingWkf {
@@ -42,7 +43,8 @@ workflow MergeWkfs {
             pickles = pickles,
             mergedModelId = mergedModelId,
             qos = qos,
-            partition = partition
+            partition = partition,
+            cpuPlatform = cpuPlatform
     }
     output {
         File mergedModel = MergingWkf.model
