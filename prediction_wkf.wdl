@@ -25,7 +25,7 @@ version 1.0
 # Workflow from https://www.biorxiv.org/content/10.64898/2026.03.10.710815v1
 # An explainable boosting machine model for identifying artifacts caused by formalin-fixed paraffin embedding
 import "wdl/wdl_structs.wdl"
-import "wdl/extraction_wkf.wdl" as extractionWkf
+import "wdl/prediction_wkf.wdl" as extractionWkf
 
 
 workflow ExtractionWkfs {

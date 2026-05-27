@@ -68,7 +68,16 @@ fifa --help
 
 ---
 
-### The tool can be run on three different modes: 
+### Subcommands
+
+Fifa can be run on three different modes. WDL workflows are available to run fifa.
+
+```
+prediction_wkf.wdl
+merging_wkf.wdl
+# retraining_wkf.wdl
+```
+
 #### 1) Extract
 For each SNV specified in a VCF file, extract features using the sample's VCF and BAM file. Creates a table of features that can be used to make predictions, or to train a new EBM model. 
 
