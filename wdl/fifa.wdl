@@ -103,7 +103,7 @@ task Prediction {
         sampleId="~{sampleId}"
         vcf="~{vcf.vcf}"
         extractedFeatures="~{extractedFeatures}"
-        all_models=~{sep=' ' models}
+        all_models="~{sep=' ' models}"
         fifa \
             predict \
             -s ${sampleId} \
@@ -141,8 +141,8 @@ task PredictionWithRna {
         sampleId="~{sampleId}"
         vcf="~{vcf.vcf}"
         extractedFeatures="~{extractedFeatures}"
-        all_models=~{sep=' ' models}
-        all_rna=~{sep=' ' optionalRnaFile}
+        all_models="~{sep=' ' models}"
+        all_rna="~{sep=' ' optionalRnaFile}"
         fifa \
             predict \
             -s ${sampleId} \
@@ -190,7 +190,7 @@ task Merge {
         set -e -o pipefail
         mergedModelId="~{mergedModelId}"
         modelPath="~{modelPath}"
-        all_pickles=~{sep=' ' pickles}
+        all_pickles="~{sep=' ' pickles}"
         fifa \
             merge \
             -m ${all_pickles} \
@@ -213,4 +213,43 @@ task Merge {
         cpuPlatform : cpuPlatform
         qos: qos
     }
-}    
+}
+
+task ReTraining {
+    input {
+        Array[File] extractedFeatures
+        File labels
+        String modelPath = "fifa_model.pkl"
+        String hyperParameterFlag
+        # resources
+        Int threads = 1
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 4
+        Int diskSize = 20
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+    }
+    
+    command <<<
+        set -e -o pipefail
+        extractedFeatures="~{sep=' ' extractedFeatures}"
+        modelPath="~{modelPath}"
+        labels="~{labels}"
+        hyperParameterFlag="~{hyperParameterFlag}"
+
+        mkdir extractedFeatures/
+        ln -s \
+        ${extractedFeatures} \
+        extractedFeatures/
+        fifa \
+            retrain \
+            -d extractedFeatures/ \
+            -o ${modelPath} \
+            --labels_path ${labels} ${hyperParameterFlag}
+    >>>
+
+    output {
+        File model = modelPath
+    }
+}
