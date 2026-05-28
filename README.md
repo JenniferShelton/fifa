@@ -75,7 +75,7 @@ Fifa can be run on three different modes. WDL workflows are available to run fif
 ```
 prediction_wkf.wdl
 merging_wkf.wdl
-# retraining_wkf.wdl
+retraining_wkf.wdl
 ```
 
 #### 1) Extract
@@ -83,7 +83,7 @@ For each SNV specified in a VCF file, extract features using the sample's VCF an
 
 ```bash
 fifa extract --help
-usage: fifa extract [-h] -s SAMPLE -v VCFFILE -b BAMFILE -r REFSEQ [-c COHORT] [-n NUM_THREADS] [-o OUTPUT_PATH] [-l LABEL LABEL] [-p]
+usage: fifa extract [-h] -s SAMPLE -v VCFFILE -b BAMFILE -r REF_FASTA [-c COHORT] [-n NUM_THREADS] [-o OUTPUT_PATH] [-l LABEL LABEL] [-p]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -93,7 +93,7 @@ optional arguments:
                         Path to sample's VCF file, with variants to extract features for.
   -b BAMFILE, --bamfile BAMFILE
                         Path to sample's BAM file, with reads to extract features for.
-  -r REFSEQ, --refseq REFSEQ
+  -r REF_FASTA,        REF_FASTA
                         Path to reference file used for alignment of the sample's BAM file.
   -c COHORT, --cohort COHORT
                         Sample's Cohort
