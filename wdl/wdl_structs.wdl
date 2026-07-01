@@ -31,6 +31,18 @@ struct Bam {
     String? md5sum
 }
 
+struct Cram {
+    File cram
+    File cramIndex
+    String? md5sum
+}
+
+struct Bram {
+    File bram
+    File bramIndex
+    String? md5sum
+}
+
 struct IndexedVcf {
     File vcf
     File index

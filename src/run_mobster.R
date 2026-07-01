@@ -11,7 +11,7 @@ suppressPackageStartupMessages(library(vroom))
 # suppressPackageStartupMessages(library(stringr))
 suppressPackageStartupMessages(library(GenomicRanges))
 suppressPackageStartupMessages(library(VariantAnnotation))
-# suppressPackageStartupMessages(library(mobster))
+suppressPackageStartupMessages(library(mobster))
 
 args = commandArgs(trailingOnly=TRUE)
 FFPE <- args[1]
