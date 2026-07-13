@@ -403,7 +403,7 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
             metrics.set_metric('pentanucleotide_context', sequence)
         
         except Exception as e:
-            logger.error(f"An error occurred: {e}")
+            logger.error(f"process_variant (very large) error trap: An error occurred: {e}")
             iolock.acquire()
             final_dictionary[variant_id] = {}
             iolock.release()
@@ -466,7 +466,7 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores):
                 variant_id = '{0}:{1}_{2}>{3}'.format(chrom, pos, REF, ALT)
                 mobster_scores[variant_id] = {'Tail': Tail}
         mfile.close()
-        os.remove(outfile)
+        # os.remove(outfile)
 
 def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file):
     is_compressed = vcf_path.endswith('.gz')
@@ -539,7 +539,7 @@ def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, lab
                 logger.error(f" The error is with your reference seq: {ref_seq}")
             raise FileNotFoundError("One or more input files are missing. Please verify that the paths are correct.")
     except Exception as e:
-        logger.error(f"Error processing {sample}: {e}")
+        logger.error(f"process_sample error trap: Error processing {sample}: {e}")
         traceback.print_exc()
 
 def process_bam_file(outpath, label, num_threads, sample, vcf_file, 
@@ -564,7 +564,7 @@ bam_file, ref_seq, cohort=None):
         
         process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads)
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
+        logger.error(f"process_bam_file error trap:An error occurred: {e}")
 
 #################################################################################
 ######################################################### PROCESS INPUT FILES ###
