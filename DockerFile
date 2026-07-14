@@ -56,31 +56,41 @@ RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
 # Install the R packages required by run_mobster.R. Keep the stack aligned with
 # conda/FIFA_environment.yml (R 4.4) and avoid pinning Bioconductor package
 # versions that were built against older R ABIs.
-RUN micromamba create -y -n fifa-r -c conda-forge -c bioconda \
-    r-base=4.4 \
-        r-remotes \
-        r-dplyr=1.1.4 \
-        r-tidyr=1.3.1 \
-        r-vroom=1.6.5 \
-    bioconductor-genomicranges \
-    bioconductor-variantannotation \
-        r-sads=0.6.3 \
-        r-crayon=1.5.3 \
-        r-ggplot2=4.0.3 \
-        r-ggthemes=5.1.0 \
-        r-tidyverse=2.0.0 \
-        r-ggpubr=0.6.0 \
-        r-ggrepel=0.9.5 \
-        r-cli=3.6.3 \
-        r-magrittr=2.0.3 \
-        r-cowplot=1.2.0 \
-        r-reshape2=1.4.4 \
-        r-clisymbols=1.2.0 \
-        r-pio=0.1.0 \
-        r-easypar=1.0.0 \
-        r-ctree=1.1.0 \
-        r-dndscv=0.1.0 \
-    && micromamba clean --all --yes
+RUN set -eux; \
+    for attempt in 1 2 3 4 5; do \
+        micromamba create -y -n fifa-r -c conda-forge -c bioconda \
+            r-base=4.4 \
+            r-remotes \
+            r-dplyr=1.1.4 \
+            r-tidyr=1.3.1 \
+            r-vroom=1.6.5 \
+            bioconductor-genomicranges \
+            bioconductor-variantannotation \
+            r-sads=0.6.3 \
+            r-crayon=1.5.3 \
+            r-ggplot2=4.0.3 \
+            r-ggthemes=5.1.0 \
+            r-tidyverse=2.0.0 \
+            r-ggpubr=0.6.0 \
+            r-ggrepel=0.9.5 \
+            r-cli=3.6.3 \
+            r-magrittr=2.0.3 \
+            r-cowplot=1.2.0 \
+            r-reshape2=1.4.4 \
+            r-clisymbols=1.2.0 \
+            r-pio=0.1.0 \
+            r-easypar=1.0.0 \
+            r-ctree=1.1.0 \
+            r-dndscv=0.1.0 \
+        && break; \
+        echo "micromamba create failed on attempt ${attempt}; retrying" >&2; \
+        if [ "${attempt}" = "5" ]; then \
+            exit 1; \
+        fi; \
+        micromamba clean --index-cache --yes || true; \
+        sleep $((attempt * 10)); \
+    done; \
+    micromamba clean --all --yes
 
 RUN /opt/conda/envs/fifa-r/bin/Rscript -e "remotes::install_github('caravagnalab/mobster@85c898f087b46e15f79144bf57bdc019678e2481', dependencies = FALSE, upgrade = 'never')" \
     && /opt/conda/envs/fifa-r/bin/Rscript -e "pkgs <- c('dplyr', 'tidyr', 'vroom', 'GenomicRanges', 'VariantAnnotation', 'mobster'); missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop(paste('Missing required R packages:', paste(missing, collapse = ', ')))"
