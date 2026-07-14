@@ -47,6 +47,7 @@ RUN apt-get update && apt-get install -y \
     lsb-release \
     bzip2 \
     git \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Install micromamba for the pinned R runtime.
