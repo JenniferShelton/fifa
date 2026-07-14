@@ -24,52 +24,38 @@ version 1.0
 
 # Workflow from https://www.biorxiv.org/content/10.64898/2026.03.10.710815v1
 # An explainable boosting machine model for identifying artifacts caused by formalin-fixed paraffin embedding
-import "wdl/wdl_structs.wdl"
-import "wdl/retraining_wkf.wdl" as retrainingExtract
-import "wdl/fifa.wdl" as fifa
+import "wdl_structs.wdl"
+import "fifa.wdl" as fifa
 
 
-workflow RetrainingWkfs {
+workflow ExtractionSubWkf {
     input {
-        Array[Bram] brams
-        Array[String] sampleIds
+        Bram bram
+        String sampleId
         String projectId
-        Array[IndexedVcf] vcfs
+        IndexedVcf vcf
         IndexedReference referenceFa
-        File labels
-        String modelPath = "fifa_model.pkl"
-        Boolean hyperParameter = false
+        File? optionalRnaFile
+        Array[File] models
         # resources
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
     }
-    scatter (i in range(length(brams))) {
-        call retrainingExtract.RetrainingExtractWkf {
-            input:
-                bram = brams[i],
-                sampleId = sampleIds[i],
-                projectId = projectId,
-                vcf = vcfs[i],
-                referenceFa = referenceFa,
-                qos = qos,
-                partition = partition,
-                cpuPlatform = cpuPlatform
-        }
-    }
-    if (hyperParameter) {
-        String hyperParameterFlagTrue = " --hyperparameter"
-    }
-    String hyperParameterFlag = select_first([hyperParameterFlagTrue, ""])
-    call fifa.ReTraining {
+    Int diskSize = ceil(size(bram.bram, "GB")) * 3
+    call fifa.Extraction {
         input:
-            extractedFeatures = RetrainingExtractWkf.extractedFeatures,
-            labels = labels,
-            modelPath = modelPath,
-            hyperParameterFlag = hyperParameterFlag
+            bram = bram,
+            sampleId = sampleId,
+            projectId = projectId,
+            vcf = vcf,
+            referenceFa = referenceFa,
+            diskSize = diskSize,
+            qos = qos,
+            partition = partition,
+            cpuPlatform = cpuPlatform
     }
     output {
-        Array[File] extractedFeatures = RetrainingExtractWkf.extractedFeatures
-        File model = ReTraining.model
+        File extractedFeatures = Extraction.extractedFeatures
     }
 }

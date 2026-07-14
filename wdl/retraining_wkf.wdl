@@ -30,7 +30,7 @@ import "fifa.wdl" as fifa
 
 workflow RetrainingExtractWkf {
     input {
-        Bam bam
+        Bram bram
         String sampleId
         String projectId
         IndexedVcf vcf
@@ -40,10 +40,10 @@ workflow RetrainingExtractWkf {
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
     }
-    Int diskSize = ceil(size(bam.bam, "GB")) * 3
+    Int diskSize = ceil(size(bram.bram, "GB")) * 3
     call fifa.Extraction {
         input:
-            bam = bam,
+            bram = bram,
             sampleId = sampleId,
             projectId = projectId,
             vcf = vcf,

@@ -118,8 +118,8 @@ RUN chmod +x /usr/local/bin/gcs_env_wrapper.sh \
     && ln -s /usr/local/bin/gcs_env_wrapper.sh /usr/local/bin/tabix \
     && ln -s /usr/local/bin/gcs_env_wrapper.sh /usr/local/bin/htsfile
 
-# Use the general GCS environment wrapper as the Entrypoint
-ENTRYPOINT ["/usr/local/bin/gcs_env_wrapper.sh"]
-
-# Set the default command to samtools
-CMD ["samtools"]
+# Install FIFA into an empty directory; cloning into the copied build context
+# fails once that context contains files.
+WORKDIR /opt/fifa
+RUN git clone --depth 1 https://github.com/nygenome/fifa.git .
+RUN echo "alias fifa='python /opt/fifa/src/cli.py'" >> /etc/bash.bashrc
