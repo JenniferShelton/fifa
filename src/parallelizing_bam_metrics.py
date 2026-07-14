@@ -295,119 +295,119 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
         variant_id = '{0}:{1}_{2}>{3}'.format(chrom, pos, ref, alt)
 
         metrics = MetricsDictionary(cohort=cohort, sample=sample, index=vcf_index) 
-        try :
-            if 'Label' in rec.keys():
-                metrics.set_metric('Label', rec['Label'])
+        # try :
+        if 'Label' in rec.keys():
+            metrics.set_metric('Label', rec['Label'])
 
-            if len(sample_data.get('AD')) <= 1 :
-                continue
-
-            dp = sample_data.get('DP')
-            metrics.set_metric('tumor_depth', sum(dp) if isinstance(dp, (list, tuple)) else dp)
-
-            if 'AF' in sample_data.keys():
-                af = sample_data.get('AF')
-                metrics.set_metric('tumor_VAF', af if isinstance(af, float) else af[0])
-
-            for pileupcolumn in bamfile.pileup(contig=chrom, start=pos - 1, stop=pos, min_base_quality=0, min_mapping_quality=0):
-                if pileupcolumn.pos == pos - 1:
-                    for pileupread in pileupcolumn.pileups:
-                        metrics.increment_metric('num_total_reads')
-                        query_index = pileupread.query_position
-                        read = pileupread.alignment
-                        
-                        ## This is probably inefficient... there must be ways to do this with pysam without
-                        ## the need for extra methods 
-                        read_index, distance_5prime, distance_3prime, clipped_length = \
-                            process_cigar_tupples(read, pos)
-
-                        if query_index is None or query_index < 0 :
-                            # Pretty sure that this is a problem when a read spans an indel
-                            continue
-
-                        base = read.query_sequence[query_index]
-                        is_ref = base == ref
-                        is_var = base == alt
-
-                        
-                        if is_read_filtered(read):
-                            metrics.increment_metric('tumor_reads_filtered')
-
-                        if is_ref or is_var: 
-                            prefix='tumor_ref' if is_ref else 'tumor_var'
-                            metrics.increment_metric('tumor_ref_count' if is_ref else 'tumor_var_count')
-                            metrics.increment_metric(f'{prefix}_num_minus_strand' if read.is_reverse else f'{prefix}_num_plus_strand')
-                            
-                            metrics.add_metric(f'{prefix}_base_qualities', read.query_qualities[query_index])
-                            metrics.add_metric(f'{prefix}_read_frag_length', read.infer_read_length())
-                            metrics.add_metric(f'{prefix}_avg_pos_as_fraction', (read_index / (read.infer_read_length() / 2)))
-                            metrics.add_metric(f'{prefix}_distances_to_5p_end', distance_5prime)
-                            metrics.add_metric(f'{prefix}_distances_to_3p_end', distance_3prime)
-                            metrics.add_metric(f'{prefix}_clipped_length', clipped_length)
-
-                            if read.is_paired:
-                                ## this is because we used to track the mapq of unpaired reads seperatly 
-                                metrics.add_metric(f'{prefix}_mapping_quality', read.mapping_quality)
-
-                            if read.has_tag('MD'):
-                                num_mismatches, mismatch_base_quals = get_mismatch_and_insertion_positions(read)
-                                metrics.add_metric('avg_num_mismatches', num_mismatches / read.infer_read_length())
-                                if mismatch_base_quals:
-                                    metrics.add_metric('avg_sum_mismatch_base_quals',(sum(mismatch_base_quals)))   
-                        else:
-                            metrics.increment_metric('tumor_other_bases_count')                   
-            
-            metrics.aggregate_base_metrics(ref, alt) 
-
-            ## Get Window-Based Metrics
-            left = max(pos - 500, 0)
-            right = min(pos + 500, bamfile.get_reference_length(chrom))
-
-            left_window = [max(0, left - 500), left]
-            right_window = [right, min(right + 500, bamfile.get_reference_length(chrom))]
-            
-            alignment_seq = fastafile.fetch(chrom, left, right)
-
-            metrics.set_metric('window_gc_cont', gc_fraction(alignment_seq))
-            metrics.set_metric('window_seq_entropy', entropy(np.unique(list(alignment_seq), return_counts=True)[1] / len(alignment_seq), base=2))
-            
-            median_cov, cov_variance = get_coverage_in_window(bamfile, fastafile, chrom, left, right)
-            if median_cov is None or median_cov == 0:
-                metrics.set_metric('window_min_cov_ratio', None)
-                metrics.set_metric('window_max_cov_ratio', None)
-                continue
-            metrics.set_metric('window_median_cov', median_cov)
-            metrics.set_metric('window_cov_variance', cov_variance)
-            
-            left_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *left_window)[0]
-            right_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *right_window)[0]
-
-            left_window_median_cov = left_window_median_cov if left_window_median_cov is not None else 0
-            right_window_median_cov = right_window_median_cov if right_window_median_cov is not None else 0
-
-            metrics.update_coverage_ratios(left=left_window_median_cov, right=right_window_median_cov)
-
-            fractions = get_read_fractions(bamfile, chrom, left, right)
-            metrics.set_metric('window_median_frag_len', fractions[0])
-            metrics.set_metric('window_dup_frac', fractions[1])
-            metrics.set_metric('window_multi_frac', fractions[2])
-            metrics.set_metric('window_improper_frac', fractions[3])
-            metrics.set_metric('window_median_mapq', fractions[4])
-            metrics.set_metric('window_read_filter_frac', fractions[5])
-
-            ## Just changed to extract tri-/penta-nucleotide sequence (although this assumes that the variant is not
-            ## at the last position in the chromosome, is that ok ? )
-
-            sequence = fastafile.fetch(chrom, pos - 3, pos + 1)
-            metrics.set_metric('trinucleotide_context', sequence[1:3])
-            metrics.set_metric('pentanucleotide_context', sequence)
-        
-        except Exception as e:
-            logger.error(f"process_variant (very large) error trap: An error occurred: {e}")
-            iolock.acquire()
-            final_dictionary[variant_id] = {}
-            iolock.release()
+        if len(sample_data.get('AD')) <= 1 :
             continue
+
+        dp = sample_data.get('DP')
+        metrics.set_metric('tumor_depth', sum(dp) if isinstance(dp, (list, tuple)) else dp)
+
+        if 'AF' in sample_data.keys():
+            af = sample_data.get('AF')
+            metrics.set_metric('tumor_VAF', af if isinstance(af, float) else af[0])
+
+        for pileupcolumn in bamfile.pileup(contig=chrom, start=pos - 1, stop=pos, min_base_quality=0, min_mapping_quality=0):
+            if pileupcolumn.pos == pos - 1:
+                for pileupread in pileupcolumn.pileups:
+                    metrics.increment_metric('num_total_reads')
+                    query_index = pileupread.query_position
+                    read = pileupread.alignment
+                    
+                    ## This is probably inefficient... there must be ways to do this with pysam without
+                    ## the need for extra methods 
+                    read_index, distance_5prime, distance_3prime, clipped_length = \
+                        process_cigar_tupples(read, pos)
+
+                    if query_index is None or query_index < 0 :
+                        # Pretty sure that this is a problem when a read spans an indel
+                        continue
+
+                    base = read.query_sequence[query_index]
+                    is_ref = base == ref
+                    is_var = base == alt
+
+                    
+                    if is_read_filtered(read):
+                        metrics.increment_metric('tumor_reads_filtered')
+
+                    if is_ref or is_var: 
+                        prefix='tumor_ref' if is_ref else 'tumor_var'
+                        metrics.increment_metric('tumor_ref_count' if is_ref else 'tumor_var_count')
+                        metrics.increment_metric(f'{prefix}_num_minus_strand' if read.is_reverse else f'{prefix}_num_plus_strand')
+                        
+                        metrics.add_metric(f'{prefix}_base_qualities', read.query_qualities[query_index])
+                        metrics.add_metric(f'{prefix}_read_frag_length', read.infer_read_length())
+                        metrics.add_metric(f'{prefix}_avg_pos_as_fraction', (read_index / (read.infer_read_length() / 2)))
+                        metrics.add_metric(f'{prefix}_distances_to_5p_end', distance_5prime)
+                        metrics.add_metric(f'{prefix}_distances_to_3p_end', distance_3prime)
+                        metrics.add_metric(f'{prefix}_clipped_length', clipped_length)
+
+                        if read.is_paired:
+                            ## this is because we used to track the mapq of unpaired reads seperatly 
+                            metrics.add_metric(f'{prefix}_mapping_quality', read.mapping_quality)
+
+                        if read.has_tag('MD'):
+                            num_mismatches, mismatch_base_quals = get_mismatch_and_insertion_positions(read)
+                            metrics.add_metric('avg_num_mismatches', num_mismatches / read.infer_read_length())
+                            if mismatch_base_quals:
+                                metrics.add_metric('avg_sum_mismatch_base_quals',(sum(mismatch_base_quals)))   
+                    else:
+                        metrics.increment_metric('tumor_other_bases_count')                   
+        
+        metrics.aggregate_base_metrics(ref, alt) 
+
+        ## Get Window-Based Metrics
+        left = max(pos - 500, 0)
+        right = min(pos + 500, bamfile.get_reference_length(chrom))
+
+        left_window = [max(0, left - 500), left]
+        right_window = [right, min(right + 500, bamfile.get_reference_length(chrom))]
+        
+        alignment_seq = fastafile.fetch(chrom, left, right)
+
+        metrics.set_metric('window_gc_cont', gc_fraction(alignment_seq))
+        metrics.set_metric('window_seq_entropy', entropy(np.unique(list(alignment_seq), return_counts=True)[1] / len(alignment_seq), base=2))
+        
+        median_cov, cov_variance = get_coverage_in_window(bamfile, fastafile, chrom, left, right)
+        if median_cov is None or median_cov == 0:
+            metrics.set_metric('window_min_cov_ratio', None)
+            metrics.set_metric('window_max_cov_ratio', None)
+            continue
+        metrics.set_metric('window_median_cov', median_cov)
+        metrics.set_metric('window_cov_variance', cov_variance)
+        
+        left_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *left_window)[0]
+        right_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *right_window)[0]
+
+        left_window_median_cov = left_window_median_cov if left_window_median_cov is not None else 0
+        right_window_median_cov = right_window_median_cov if right_window_median_cov is not None else 0
+
+        metrics.update_coverage_ratios(left=left_window_median_cov, right=right_window_median_cov)
+
+        fractions = get_read_fractions(bamfile, chrom, left, right)
+        metrics.set_metric('window_median_frag_len', fractions[0])
+        metrics.set_metric('window_dup_frac', fractions[1])
+        metrics.set_metric('window_multi_frac', fractions[2])
+        metrics.set_metric('window_improper_frac', fractions[3])
+        metrics.set_metric('window_median_mapq', fractions[4])
+        metrics.set_metric('window_read_filter_frac', fractions[5])
+
+        ## Just changed to extract tri-/penta-nucleotide sequence (although this assumes that the variant is not
+        ## at the last position in the chromosome, is that ok ? )
+
+        sequence = fastafile.fetch(chrom, pos - 3, pos + 1)
+        metrics.set_metric('trinucleotide_context', sequence[1:3])
+        metrics.set_metric('pentanucleotide_context', sequence)
+        
+        # except Exception as e:
+            # logger.error(f"process_variant (very large) error trap: An error occurred: {e}")
+            # iolock.acquire()
+            # final_dictionary[variant_id] = {}
+            # iolock.release()
+            # continue
 
         iolock.acquire()
         final_dictionary[variant_id] = metrics.get_all_metrics()
@@ -449,8 +449,8 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores):
         stderr=subprocess.PIPE
         )
     
-    logger.info(process.stdout)
-    logger.error(process.stderr)
+    logger.info(process.stdout.encode().decode('unicode_escape'))
+    logger.error(process.stderr.encode().decode('unicode_escape'))
     
     if not os.path.isfile(outfile):
         logger.info(f"MOBSTER did not run succesfully on {sample}")
@@ -524,23 +524,23 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
 ### PROCESS INPUT FILES #########################################################
     
 def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, label, num_threads): 
-    try:
-        if os.path.isfile(vcf_path) and os.path.isfile(bam_path) and os.path.isfile(ref_seq):
-            logger.info(f'Processing BAM file for sample: {sample}')
-            extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file)
-                
-        else:
-            logger.error("There is an issue with one of your input files.")
-            if not (os.path.isfile(vcf_path)):
-                logger.error(f" The error is with your VCF File path: {vcf_path}")
-            if not (os.path.isfile(bam_path)):
-                logger.error(f" The error is with your BAM File path: {bam_path}")
-            if not (os.path.isfile(ref_seq)):
-                logger.error(f" The error is with your reference seq: {ref_seq}")
-            raise FileNotFoundError("One or more input files are missing. Please verify that the paths are correct.")
-    except Exception as e:
-        logger.error(f"process_sample error trap: Error processing {sample}: {e}")
-        traceback.print_exc()
+    # try:
+    if os.path.isfile(vcf_path) and os.path.isfile(bam_path) and os.path.isfile(ref_seq):
+        logger.info(f'Processing BAM file for sample: {sample}')
+        extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file)
+            
+    else:
+        logger.error("There is an issue with one of your input files.")
+        if not (os.path.isfile(vcf_path)):
+            logger.error(f" The error is with your VCF File path: {vcf_path}")
+        if not (os.path.isfile(bam_path)):
+            logger.error(f" The error is with your BAM File path: {bam_path}")
+        if not (os.path.isfile(ref_seq)):
+            logger.error(f" The error is with your reference seq: {ref_seq}")
+        raise FileNotFoundError("One or more input files are missing. Please verify that the paths are correct.")
+    # except Exception as e:
+    #     logger.error(f"process_sample error trap: Error processing {sample}: {e}")
+    #     traceback.print_exc()
 
 def process_bam_file(outpath, label, num_threads, sample, vcf_file, 
 bam_file, ref_seq, cohort=None):
@@ -561,10 +561,11 @@ bam_file, ref_seq, cohort=None):
             if not os.path.exists(outpath):
                 os.makedirs(outpath)
             output_file=os.path.join(outpath, f"{sample}_extracted_features.csv")
-        
-        process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads)
     except Exception as e:
         logger.error(f"process_bam_file error trap:An error occurred: {e}")
+        process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads)
+    # except Exception as e:
+    #     logger.error(f"process_bam_file error trap:An error occurred: {e}")
 
 #################################################################################
 ######################################################### PROCESS INPUT FILES ###
