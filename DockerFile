@@ -53,17 +53,17 @@ RUN apt-get update && apt-get install -y \
 RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
     | tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba
 
-# Install the R packages required by run_mobster.R at versions recorded in the
-# working conda environment. mobster itself is installed from the matching
-# GitHub commit because it is not distributed as a conda package.
+# Install the R packages required by run_mobster.R. Keep the stack aligned with
+# conda/FIFA_environment.yml (R 4.4) and avoid pinning Bioconductor package
+# versions that were built against older R ABIs.
 RUN micromamba create -y -n fifa-r -c conda-forge -c bioconda \
-        r-base=4.2.3 \
+    r-base=4.4 \
         r-remotes \
         r-dplyr=1.1.4 \
         r-tidyr=1.3.1 \
         r-vroom=1.6.5 \
-        bioconductor-genomicranges=1.42.0 \
-        bioconductor-variantannotation=1.36.0 \
+    bioconductor-genomicranges \
+    bioconductor-variantannotation \
         r-sads=0.6.3 \
         r-crayon=1.5.3 \
         r-ggplot2=4.0.3 \
