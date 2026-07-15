@@ -48,6 +48,21 @@ RUN apt-get update && apt-get install -y \
     bzip2 \
     git \
     jq \
+    build-essential \
+    cmake \
+    gfortran \
+    libbz2-dev \
+    libcurl4-openssl-dev \
+    liblzma-dev \
+    libssl-dev \
+    libuv1-dev \
+    libxml2-dev \
+    pkg-config \
+    python3-dev \
+    python3-pip \
+    python3-setuptools \
+    python3-venv \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install micromamba for the pinned R runtime.
@@ -102,8 +117,23 @@ RUN set -eux; \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list; \
     apt-get update && apt-get install -y google-cloud-sdk && rm -rf /var/lib/apt/lists/*
 
-# Install Google Authentication library for Python token fetcher
-RUN pip install --no-cache-dir google-auth requests
+# Install Python requirements in an isolated virtual environment.
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:/opt/conda/bin:/opt/conda/envs/fifa-r/bin:/opt/samtools/bin:${PATH}"
+RUN python3 -m venv "$VIRTUAL_ENV"
+RUN python -m pip install --no-cache-dir --upgrade \
+    "pip<25" \
+    "setuptools<82" \
+    wheel \
+    pybind11 \
+    "Cython<3" \
+    "numpy==1.24.4" \
+    "pysam==0.15.4" \
+    google-auth \
+    requests \
+    && python -c "import pkg_resources, pybind11, numpy, pysam"
+COPY requirements.txt /tmp/build/requirements.txt
+RUN python -m pip install --no-build-isolation --no-cache-dir -r /tmp/build/requirements.txt
 
 # Copy compiled binaries and libraries from the builder stage
 COPY --from=builder /opt/samtools /opt/samtools
@@ -121,5 +151,5 @@ RUN chmod +x /usr/local/bin/gcs_env_wrapper.sh \
 # Install FIFA into an empty directory; cloning into the copied build context
 # fails once that context contains files.
 WORKDIR /opt/fifa
-RUN git clone --depth 1 https://github.com/nygenome/fifa.git .
-RUN echo "alias fifa='python /opt/fifa/src/cli.py'" >> /etc/bash.bashrc
+RUN git clone --depth 1 https://github.com/JenniferShelton/fifa.git .
+RUN echo "alias fifa='python3 /opt/fifa/src/cli.py'" >> /etc/bash.bashrc
