@@ -108,8 +108,9 @@ RUN set -eux; \
     done; \
     micromamba clean --all --yes
 
-RUN /opt/conda/envs/fifa-r/bin/Rscript -e "remotes::install_github('caravagnalab/mobster@85c898f087b46e15f79144bf57bdc019678e2481', dependencies = FALSE, upgrade = 'never')" \
-    && /opt/conda/envs/fifa-r/bin/Rscript -e "pkgs <- c('dplyr', 'tidyr', 'vroom', 'GenomicRanges', 'VariantAnnotation', 'mobster'); missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop(paste('Missing required R packages:', paste(missing, collapse = ', ')))"
+RUN /opt/conda/envs/fifa-r/bin/Rscript -e "if (!requireNamespace('BiocManager', quietly = TRUE)) install.packages('BiocManager', repos = 'https://cloud.r-project.org'); need <- c('GenomeInfoDbData', 'GenomicRanges', 'VariantAnnotation'); miss <- need[!vapply(need, requireNamespace, logical(1), quietly = TRUE)]; if (length(miss)) BiocManager::install(miss, ask = FALSE, update = FALSE)" \
+    && /opt/conda/envs/fifa-r/bin/Rscript -e "remotes::install_github('caravagnalab/mobster@85c898f087b46e15f79144bf57bdc019678e2481', dependencies = FALSE, upgrade = 'never')" \
+    && /opt/conda/envs/fifa-r/bin/Rscript -e "pkgs <- c('dplyr', 'tidyr', 'vroom', 'GenomeInfoDbData', 'GenomicRanges', 'VariantAnnotation', 'mobster'); missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop(paste('Missing required R packages:', paste(missing, collapse = ', ')))"
 
 # Install Google Cloud SDK (provides `gcloud` CLI)
 RUN set -eux; \
