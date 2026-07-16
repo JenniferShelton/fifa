@@ -193,10 +193,14 @@ if (utils::packageVersion("matrixStats") <= "0.57.0") {
 
 BiocManager::install(version = "3.12", ask = FALSE, update = FALSE)
 BiocManager::install(
-    c("XVector", "GenomicRanges", "VariantAnnotation"),
+    c("XVector", "GenomicRanges", "VariantAnnotation", "biomaRt"),
     ask = FALSE,
     update = FALSE
 )
+
+if (utils::packageVersion("biomaRt") != "2.46.3") {
+    stop("biomaRt must be exactly version 2.46.3")
+}
 
 github_packages <- c(
     "caravagn/pio@2cfe575",
@@ -213,7 +217,7 @@ for (github_package in github_packages) {
     )
 }
 
-required_packages <- c("XVector", "GenomicRanges", "VariantAnnotation", "mobster")
+required_packages <- c("XVector", "GenomicRanges", "VariantAnnotation", "biomaRt", "mobster")
 missing_packages <- required_packages[
     !vapply(required_packages, can_load, logical(1))
 ]
