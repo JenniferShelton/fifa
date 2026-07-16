@@ -483,7 +483,7 @@ task Extraction {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:18a36330f0857c256837695fb049ce82b7e508f9a0ede3f281377df920a365c0"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:b69b71ee9d0559797fb6f974a947641b2db76fbdabd4bd28023a180cb98dd5fc"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -533,7 +533,7 @@ task Prediction {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:18a36330f0857c256837695fb049ce82b7e508f9a0ede3f281377df920a365c0"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:b69b71ee9d0559797fb6f974a947641b2db76fbdabd4bd28023a180cb98dd5fc"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
@@ -586,7 +586,7 @@ task PredictionWithRna {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:18a36330f0857c256837695fb049ce82b7e508f9a0ede3f281377df920a365c0"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:b69b71ee9d0559797fb6f974a947641b2db76fbdabd4bd28023a180cb98dd5fc"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -630,7 +630,7 @@ task Merge {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:18a36330f0857c256837695fb049ce82b7e508f9a0ede3f281377df920a365c0"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:b69b71ee9d0559797fb6f974a947641b2db76fbdabd4bd28023a180cb98dd5fc"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
@@ -681,7 +681,7 @@ task ReTraining {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:18a36330f0857c256837695fb049ce82b7e508f9a0ede3f281377df920a365c0"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:b69b71ee9d0559797fb6f974a947641b2db76fbdabd4bd28023a180cb98dd5fc"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
