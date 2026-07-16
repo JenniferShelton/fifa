@@ -30,7 +30,7 @@ import "wdl/prediction_wkf.wdl" as extractionWkf
 
 workflow ExtractionWkfs {
     input {
-        Array[Bam] bams
+        Array[Bram] brams
         Array[String] sampleIds
         String projectId
         Array[IndexedVcf] vcfs
@@ -43,11 +43,11 @@ workflow ExtractionWkfs {
         String cpuPlatform = "Intel Cascade Lake"
     }
     Array[File] rnaFiles = select_first([optionalRnaFiles, []])
-    scatter (i in range(length(bams))) {
+    scatter (i in range(length(brams))) {
         if (defined(optionalRnaFiles)) {
             call extractionWkf.ExtractionWkf as rnaExtractionWkf {
                 input:
-                    bam = bams[i],
+                    bram = brams[i],
                     sampleId = sampleIds[i],
                     projectId = projectId,
                     vcf = vcfs[i],
@@ -62,7 +62,7 @@ workflow ExtractionWkfs {
         if (!defined(optionalRnaFiles)) {
             call extractionWkf.ExtractionWkf {
                 input:
-                    bam = bams[i],
+                    bram = brams[i],
                     sampleId = sampleIds[i],
                     projectId = projectId,
                     vcf = vcfs[i],

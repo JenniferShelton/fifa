@@ -36,7 +36,6 @@ workflow ExtractionSubWkf {
         IndexedVcf vcf
         IndexedReference referenceFa
         File? optionalRnaFile
-        Array[File] models
         # resources
         String qos = "compbio"
         String partition = "cpu"

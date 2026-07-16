@@ -461,6 +461,13 @@ task Extraction {
         vcf="~{vcf.vcf}"
         threads="~{threads}"
         referenceFa="~{referenceFa.fasta}"
+
+        ln -s ${bram} .
+        ln -s ${bram.bramIndex} .
+        ln -s ${vcf} .
+        ln -s ${vcf.index} .
+        ln -s ${referenceFa}* .
+
         # Extract features for the EBM model. This script also extracts the reference sequence context for each variant, which is used in the mutational signature analysis.
         python3 /opt/fifa/src/cli.py \
             extract \
