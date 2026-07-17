@@ -51,5 +51,5 @@ COPY . /opt/work
 # Install FIFA into an empty directory; cloning into the copied build context
 # fails once that context contains files.
 WORKDIR /opt/fifa
-RUN git clone --depth 1 https://github.com/nygenome/fifa.git .
+RUN git clone --depth 1 https://github.com/JenniferShelton/fifa.git .
 RUN echo "alias fifa='python /opt/fifa/src/cli.py'" >> /etc/bash.bashrc

@@ -462,10 +462,20 @@ task Extraction {
         threads="~{threads}"
         referenceFa="~{referenceFa.fasta}"
 
+        export TMPDIR=/tmp/
+        mkdir -p ${TMPDIR}
+
+        extension=$( basename ${vcf} | sed 's|.*\.vcf|.vcf|' )
+        vcf_basename=$( basename ${vcf} | sed 's|\.vcf.*||' )
+        new_vcf=${vcf_basename:0:25}${extension}
+        ln -s ${vcf} ${new_vcf}
+
+        vcf_index_extension=$( basename ~{vcf.index} | sed 's|.*\.vcf|.vcf|' )
+        new_vcf_index=${vcf_basename:0:25}${vcf_index_extension}
+        ln -s ~{vcf.index} ${new_vcf_index}
+
         ln -s ${bram} .
-        ln -s ${bram.bramIndex} .
-        ln -s ${vcf} .
-        ln -s ${vcf.index} .
+        ln -s ~{bram.bramIndex} .
         ln -s ${referenceFa}* .
 
         # Extract features for the EBM model. This script also extracts the reference sequence context for each variant, which is used in the mutational signature analysis.
@@ -473,9 +483,9 @@ task Extraction {
             extract \
             -s ${sampleId} \
             -c ${projectId} \
-            -v ${vcf} \
-            -b ${bram} \
-            -r ${referenceFa} \
+            -v ${new_vcf} \
+            -b $( basename ${bram} ) \
+            -r $( basename ${referenceFa} ) \
             -o . \
             -n ${threads}
     >>>

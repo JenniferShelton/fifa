@@ -563,7 +563,7 @@ bam_file, ref_seq, cohort=None):
             output_file=os.path.join(outpath, f"{sample}_extracted_features.csv")
     except Exception as e:
         logger.error(f"process_bam_file error trap:An error occurred: {e}")
-        process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads)
+    process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads)
     # except Exception as e:
     #     logger.error(f"process_bam_file error trap:An error occurred: {e}")
 
