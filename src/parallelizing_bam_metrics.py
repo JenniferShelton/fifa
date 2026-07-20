@@ -449,8 +449,8 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores):
         stderr=subprocess.PIPE
         )
     
-    logger.info(process.stdout.encode().decode('unicode_escape'))
-    logger.error(process.stderr.encode().decode('unicode_escape'))
+    logger.info(process.stdout.decode('unicode_escape'))
+    logger.error(process.stderr.decode('unicode_escape'))
     
     if not os.path.isfile(outfile):
         logger.info(f"MOBSTER did not run succesfully on {sample}")
