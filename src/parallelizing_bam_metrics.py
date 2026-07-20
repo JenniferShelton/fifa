@@ -321,7 +321,9 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
                     read_index, distance_5prime, distance_3prime, clipped_length = \
                         process_cigar_tupples(read, pos)
 
-                    if query_index is None or query_index < 0 :
+                    if query_index is None \
+                            or query_index < 0 \
+                            or read_index is None:
                         # Pretty sure that this is a problem when a read spans an indel
                         continue
 
