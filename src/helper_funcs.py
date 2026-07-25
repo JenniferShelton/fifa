@@ -76,7 +76,9 @@ def scale_features(variants):
     target = [c for c in variants.columns if c.endswith('_scaled')]
 
     for col in target:
-        variants[col] = variants.groupby('Sample')[col].transform(lambda x: zscore(x, ddof=0, nan_policy='omit') if x.std(ddof=0) > 0 else 0.0)
+        all_features_including_scaled[col] = all_features_including_scaled.groupby('Sample')[col].transform(
+    	    lambda x: (x - np.nanmean(x)) / np.nanstd(x) if np.nanstd(x) > 1e-9 else 0.0
+    	)
 
     # variants.drop(features_to_scale, axis=1, inplace=True)
     return variants
