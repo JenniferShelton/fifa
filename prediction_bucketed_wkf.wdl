@@ -123,74 +123,112 @@ workflow PredictionBucketedWkf {
                 bam : bamDownload.download,
                 bamIndex : baiDownload.download
             }
-    call fifaTasks.MakeVariantBed {
+    # gather split VCF filenames to avoid glob that can fail on prem
+    Int count = 100
+    scatter (i in range(count)) {
+        Int num = i + 1
+        String suffixes = "${num}"
+    }
+    String prefix = "~{sampleId}.fifa."
+    String additionalSuffix = ".vcf"
+    scatter (index in range(length(suffixes))) {
+        String suffix = suffixes[index]
+        String splitVcfPaths = "~{prefix}.~{suffix}~{additionalSuffix}"
+    }
+    call fifaTasks.SplitVcf {
         input:
             vcf = vcf.vcf,
-            sampleId = sampleId,
-            referenceFa = referenceFa,
-            diskSize = 10
+            prefix = prefix,
+            diskSize = (ceil(size(vcf.vcf, "GB")) * 3) + 10,
+            maxRows = 1000,
+            minSplits = select_first([cloudMinSplits, hpcMinSplits]),
+            maxSplits = select_first([cloudMaxSplits, hpcMaxSplits]),
+            splitVcfPaths = splitVcfPaths
     }
-    call fifaTasks.MakeVariantCram {
-        input:
-            finalBam = bam,
-            gcpProject = gcpProject,
-            serviceAccountKey = serviceAccountKey,
-            features1000Bed = MakeVariantBed.features1000Bed,
-            sampleId = sampleId,
-            referenceFa = referenceFa,
-            diskSize = 30
-    }
-    Bram bram = object {
-        bram : MakeVariantCram.variantCram.cram,
-        bramIndex : MakeVariantCram.variantCram.cramIndex
-    }
-    if (defined(optionalRnaFile)) {
-        File rnaFile = select_first([optionalRnaFile])
-        call predictionWkf.PredictionWkf as rnaPredictionWkf {
+    Array[File] splitVcfs = select_all(SplitVcf.splitVcfs)
+    scatter(splitVcf in splitVcfs) {
+        call fifaTasks.ReorderVcfColumns {
             input:
-                bram = bram,
-                sampleId = sampleId,
-                projectId = projectId,
-                vcf = vcf,
-                optionalRnaFile = rnaFile,
-                models = models,
-                referenceFa = referenceFa,
-                qos = qos,
-                partition = partition,
-                cpuPlatform = cpuPlatform
+                tumor = tumorId,
+                normal = normalId,
+                rawVcf = splitVcf,
+                orderedVcfPath = "~{sampleId}.renamedColumns.vcf",
+                memoryGb = 4,
+                diskSize = 10
         }
-    }
-    if (!defined(optionalRnaFile)) {
-        call predictionWkf.PredictionWkf {
-            input:
-                bram = bram,
-                sampleId = sampleId,
-                projectId = projectId,
-                vcf = vcf,
-                models = models,
-                referenceFa = referenceFa,
-                qos = qos,
-                partition = partition,
-                cpuPlatform = cpuPlatform
-        }
-    }
-    File extractedFeaturesRun = select_first([rnaPredictionWkf.extractedFeatures, PredictionWkf.extractedFeatures])
-    File fifaVcfRun = select_first([rnaPredictionWkf.fifaVcf, PredictionWkf.fifaVcf])
-    # }
-    # call fifaTasks.ConcateTables {
-    #     input:
-    #         tables = extractedFeaturesRun,
-    #         outputTablePath =  "~{sampleId}.extracted_features.csv"
-    # }
-    # call fifaTasks.Gatk4MergeSortVcf {
-    #     input:
-    #         tempVcfs = fifaVcfRun,
-    #         referenceFa = referenceFa,
-    #         sortedVcfPath = "~{sampleId}.fifa.vcf"
-    # }
-    output {
-        File extractedFeatures = extractedFeaturesRun
-        File fifaVcf = fifaVcfRun
-    }
 
+        call fifaTasks.CompressIndexVcf {
+            input:
+                vcf = ReorderVcfColumns.orderedVcf,
+                memoryGb = 1
+        }
+        call fifaTasks.MakeVariantBed {
+            input:
+                vcf = splitVcf,
+                sampleId = sampleId,
+                referenceFa = referenceFa,
+                diskSize = 10
+        }
+        call fifaTasks.MakeVariantCram {
+            input:
+                finalBam = bam,
+                gcpProject = gcpProject,
+                serviceAccountKey = serviceAccountKey,
+                features1000Bed = MakeVariantBed.features1000Bed,
+                sampleId = sampleId,
+                referenceFa = referenceFa,
+                diskSize = 30
+        }
+        Bram bram = object {
+            bram : MakeVariantCram.variantCram.cram,
+            bramIndex : MakeVariantCram.variantCram.cramIndex
+        }
+        if (defined(optionalRnaFile)) {
+            File rnaFile = select_first([optionalRnaFile])
+            call predictionWkf.PredictionWkf as rnaPredictionWkf {
+                input:
+                    bram = bram,
+                    sampleId = sampleId,
+                    projectId = projectId,
+                    vcf = CompressIndexVcf.vcfCompressedIndexed,
+                    optionalRnaFile = rnaFile,
+                    models = models,
+                    referenceFa = referenceFa,
+                    qos = qos,
+                    partition = partition,
+                    cpuPlatform = cpuPlatform
+            }
+        }
+        if (!defined(optionalRnaFile)) {
+            call predictionWkf.PredictionWkf {
+                input:
+                    bram = bram,
+                    sampleId = sampleId,
+                    projectId = projectId,
+                    vcf = CompressIndexVcf.vcfCompressedIndexed,
+                    models = models,
+                    referenceFa = referenceFa,
+                    qos = qos,
+                    partition = partition,
+                    cpuPlatform = cpuPlatform
+            }
+        }
+        File extractedFeaturesRun = select_first([rnaPredictionWkf.extractedFeatures, PredictionWkf.extractedFeatures])
+        File fifaVcfRun = select_first([rnaPredictionWkf.fifaVcf, PredictionWkf.fifaVcf])
+    }
+    call fifaTasks.ConcateTables {
+        input:
+            tables = extractedFeaturesRun,
+            outputTablePath =  "~{sampleId}.extracted_features.csv"
+    }
+    call fifaTasks.Gatk4MergeSortVcf {
+        input:
+            tempVcfs = fifaVcfRun,
+            referenceFa = referenceFa,
+            sortedVcfPath = "~{sampleId}.fifa.vcf"
+    }
+    output {
+        File extractedFeatures = ConcateTables.outputTable
+        File fifaVcf = Gatk4MergeSortVcf.sortedVcf.vcf
+    }
 }
