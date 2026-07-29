@@ -73,7 +73,14 @@ def scale_features(variants):
         variants[f'{feature}_scaled'] = variants.groupby('Sample')[feature].transform(
             lambda x: np.arcsinh(x))
 
-    variants.drop(features_to_scale, axis=1, inplace=True)
+    target = [c for c in variants.columns if c.endswith('_scaled')]
+
+    for col in target:
+        all_features_including_scaled[col] = all_features_including_scaled.groupby('Sample')[col].transform(
+    	    lambda x: (x - np.nanmean(x)) / np.nanstd(x) if np.nanstd(x) > 1e-9 else 0.0
+    	)
+
+    # variants.drop(features_to_scale, axis=1, inplace=True)
     return variants
 
 def load_variants(directory, labels_path):
