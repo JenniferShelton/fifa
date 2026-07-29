@@ -99,37 +99,33 @@ def generate_output_vcf_file(predictions, vcf_path):
     if os.path.isfile(outpath):
         os.remove(outpath)
 
-    try:
-        origvcf = pysam.VariantFile(vcf_path, "r")
-        origvcf.header.info.add("FIFA_LABEL", "1", "Integer", "Binary FIFA Classification (0-Artifact or 1-Real)")
-        origvcf.header.info.add("FIFA_PROB", "1", "Float", "FIFA - Probability of Variant being Real, based on FIFA's Classification")
-        vcf_out = pysam.VariantFile(outpath, 'w', header=origvcf.header)
-        
-        prediction_dict = dict(zip(predictions['Variant'], predictions['Predicted']))
-        probability_dict = dict(zip(predictions['Variant'], predictions['Probability']))
-        positions = set()
+    origvcf = pysam.VariantFile(vcf_path, "r")
+    origvcf.header.info.add("FIFA_LABEL", "1", "Integer", "Binary FIFA Classification (0-Artifact or 1-Real)")
+    origvcf.header.info.add("FIFA_PROB", "1", "Float", "FIFA - Probability of Variant being Real, based on FIFA's Classification")
+    vcf_out = pysam.VariantFile(outpath, 'w', header=origvcf.header)
     
-        for variant in origvcf:
-            position = f"{variant.chrom}:{variant.pos}_{variant.ref}>{variant.alts[0]}"
-            
-            if position in positions:
-                print(f"Duplicate entry found for: {position}")
-                continue
+    prediction_dict = dict(zip(predictions['Variant'], predictions['Predicted']))
+    probability_dict = dict(zip(predictions['Variant'], predictions['Probability']))
+    positions = set()
 
-            pred = prediction_dict.get(position)
-            prob = probability_dict.get(position)
-            
-            if (pred is not None) and (prob is not None): ## and variant.info.get('HighConfidence')
-                positions.add(position)
-                variant.info['FIFA_LABEL'] = int(pred)
-                variant.info['FIFA_PROB'] = round(prob, 4)
-            
-            vcf_out.write(variant)
+    for variant in origvcf:
+        position = f"{variant.chrom}:{variant.pos}_{variant.ref}>{variant.alts[0]}"
+        
+        if position in positions:
+            print(f"Duplicate entry found for: {position}")
+            continue
 
-        logger.info(f"Successfully generated: {outpath}")
+        pred = prediction_dict.get(position)
+        prob = probability_dict.get(position)
+        
+        if (pred is not None) and (prob is not None): ## and variant.info.get('HighConfidence')
+            positions.add(position)
+            variant.info['FIFA_LABEL'] = int(pred)
+            variant.info['FIFA_PROB'] = round(prob, 4)
+        
+        vcf_out.write(variant)
 
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    logger.info(f"Successfully generated: {outpath}")
 
 def parse_pairs_path(pairs_path, combined_df): 
     with open(pairs_path, newline='') as pairsfile:
@@ -156,7 +152,9 @@ def get_zero_score_names(models):
 def remove_zero_score_terms_by_name(model, zero_score_names):
     return model.remove_terms(zero_score_names)
 
-def predict(extracted_features_paths, outpath, model_file, pairs_path=None, vcf_path=None):
+def predict(extracted_features_paths, outpath, 
+            ebm, sample,
+            pairs_path=None, vcf_path=None):
     global predictions_path 
     global logger 
 
@@ -172,69 +170,8 @@ def predict(extracted_features_paths, outpath, model_file, pairs_path=None, vcf_
     except Exception as e:
         print(f"An error occurred: {e}")
     
-    try: 
-        variants = pd.concat(
-            (pd.read_csv(path).fillna(0) for path in extracted_features_paths), ignore_index=True)
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-    try:
-        ebm = ExplainableBoostingClassifier()
-        if isinstance(model_file, list):
-            models = []
-            for i, model_path in enumerate(model_file):
-                script_path = os.path.abspath(__file__)
-                directory_path = os.path.dirname(script_path)
-                fifa_install_dir=os.path.dirname(directory_path + "/../")
-                if model_path == "NYGC1":
-                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC1.pkl')
-                    with open(path, 'rb') as file:
-                        model = pickle.load(file)
-                    models.append(model)
-                elif model_path == "NYGC2":
-                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC2.pkl')
-                    with open(path, 'rb') as file:
-                        model = pickle.load(file)
-                    models.append(model)
-                elif re.match(r'^(?:CGCI-)?BLGSP$', model_path):
-                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-BLGSP.pkl')
-                    with open(path, 'rb') as file:
-                        model = pickle.load(file)
-                    models.append(model)
-                elif re.match(r'^(?:CGCI-)?HTMCP$', model_path):
-                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-HTMCP.pkl')
-                    with open(path, 'rb') as file:
-                        model = pickle.load(file)
-                    models.append(model)
-                elif not os.path.isfile(model_path):
-                    raise FileNotFoundError(f"Model file {model_path} does not exist.")
-                else:
-                    model = pickle.load(open(model_path, 'rb'))
-                    models.append(model)
-            
-            if not models:
-                raise ValueError("No models were loaded. Please check the input model paths.")
-
-            zero_score_names = get_zero_score_names(models)
-
-            if len(models) > 1:
-                for model in models:
-                    model = remove_zero_score_terms_by_name(model, zero_score_names)
-                    model_feature_index = {name: i for i, name in enumerate(model.feature_names_in_)}
-                    reorder_indices = [model_feature_index[name] for name in models[0].feature_names_in_]
-                    model.feature_names_in_ = [model.feature_names_in_[i] for i in reorder_indices]
-                    model.term_names_ = [model.term_names_[i] for i in reorder_indices]
-                    model.feature_types_in_ = [model.feature_types_in_[i] for i in reorder_indices] 
-
-                ebm =  merge_ebms(models)
-        elif os.path.isfile(model_file):
-            with open(model_file, 'rb') as f:
-                ebm = pickle.load(f)
-            
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(f"The path for your ebm model is incorrect. \n{model_file}")
-    
+    variants = pd.concat(
+        (pd.read_csv(path).fillna(0) for path in extracted_features_paths), ignore_index=True)
     combined_df = make_predictions(ebm, variants)
 
     if(pairs_path):

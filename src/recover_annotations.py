@@ -19,6 +19,7 @@ import csv
 from process_bam_file import get_column_idx
 from helper_funcs import convert_hot_encodings, scale_features
 import logging
+import traceback
 
 global logger
 global predictions_path
@@ -63,7 +64,7 @@ def make_predictions(ebm, variants):
     predictions = pd.concat([variant_ids_test, y_pred, y_probs], axis=1)
     return predictions
 
-def generate_output_vcf_file(predictions, rna_annotations, vcf_path): 
+def generate_output_vcf_file_rna(predictions, rna_annotations, vcf_path): 
     """
     Generates output VCF file with FIFA predictions added as an annotation in the INFO field,
     And probability of being a "real" variant added as an independent annotation. 
@@ -79,50 +80,47 @@ def generate_output_vcf_file(predictions, rna_annotations, vcf_path):
     if os.path.isfile(outpath):
         os.remove(outpath)
 
-    try:
-        origvcf = pysam.VariantFile(vcf_path, "r")
-        origvcf.header.info.add("FIFA_LABEL", "1", "Integer", "Binary FIFA Classification (0-Artifact or 1-Real)")
-        origvcf.header.info.add("FIFA_PROB", "1", "Float", "FIFA - Probability of Variant being Real, based on FIFA's Classification")
-        origvcf.header.info.add("RNA_seq", "3", "Integer", "Number of Reads in the RNA supporting the REF, ALT, or OTHER ALT alleles")
-        vcf_out = pysam.VariantFile(outpath, 'w', header=origvcf.header)
-        
-        prediction_dict = dict(zip(predictions['Variant'], predictions['Predicted']))
-        probability_dict = dict(zip(predictions['Variant'], predictions['Probability']))
-        positions = set()
+    origvcf = pysam.VariantFile(vcf_path, "r")
+    origvcf.header.info.add("FIFA_LABEL", "1", "Integer", "Binary FIFA Classification (0-Artifact or 1-Real)")
+    origvcf.header.info.add("FIFA_PROB", "1", "Float", "FIFA - Probability of Variant being Real, based on FIFA's Classification")
+    origvcf.header.info.add("RNA_seq", "3", "Integer", "Number of Reads in the RNA supporting the REF, ALT, or OTHER ALT alleles")
+    vcf_out = pysam.VariantFile(outpath, 'w', header=origvcf.header)
     
-        for variant in origvcf:
-            position = f"{variant.chrom}:{variant.pos}_{variant.ref}>{variant.alts[0]}"
-            
-            if position in positions:
-                print(f"Duplicate entry found for: {position}")
-                continue
+    prediction_dict = dict(zip(predictions['Variant'], predictions['Predicted']))
+    probability_dict = dict(zip(predictions['Variant'], predictions['Probability']))
+    positions = set()
 
-            pred = prediction_dict.get(position)
-            prob = probability_dict.get(position)
-            
-            if (pred is not None) and (prob is not None): #and variant.info.get('HighConfidence')
-                positions.add(position)
-                variant.info['FIFA_LABEL'] = int(pred)
-                variant.info['FIFA_PROB'] = round(prob, 4)
-                if position in rna_annotations['Variant'].values:
-                    row = rna_annotations[rna_annotations['Variant'] == position][['REF', 'ALT', 'OTHER_ALT']]
-                    
-                    ref = int(row['REF'].fillna(0).values[0])
-                    alt = int(row['ALT'].fillna(0).values[0])
-                    other_alt = int(row['OTHER_ALT'].fillna(0).values[0])
-                    variant.info['RNA_seq'] = [ref, alt, other_alt]
+    for variant in origvcf:
+        position = f"{variant.chrom}:{variant.pos}_{variant.ref}>{variant.alts[0]}"
+        
+        if position in positions:
+            print(f"Duplicate entry found for: {position}")
+            continue
 
-                    total = ref + alt + other_alt
+        pred = prediction_dict.get(position)
+        prob = probability_dict.get(position)
+        
+        if (pred is not None) and (prob is not None): #and variant.info.get('HighConfidence')
+            positions.add(position)
+            variant.info['FIFA_LABEL'] = int(pred)
+            variant.info['FIFA_PROB'] = round(prob, 4)
+            if position in rna_annotations['Variant'].values:
+                row = rna_annotations[rna_annotations['Variant'] == position][['REF', 'ALT', 'OTHER_ALT']]
+                
+                ref = int(row['REF'].fillna(0).values[0])
+                alt = int(row['ALT'].fillna(0).values[0])
+                other_alt = int(row['OTHER_ALT'].fillna(0).values[0])
+                variant.info['RNA_seq'] = [ref, alt, other_alt]
 
-                    if (total > 5) and (alt > 0.1 * total):
-                        variant.info['FIFA_LABEL'] = 1 
-            
-            vcf_out.write(variant)
+                total = ref + alt + other_alt
 
-        logger.info(f"Successfully generated: {outpath}")
+                if (total > 5) and (alt > 0.1 * total):
+                    variant.info['FIFA_LABEL'] = 1 
+        
+        vcf_out.write(variant)
 
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    logger.info(f"Successfully generated: {outpath}")
+
 
 ## In the future, this code should be factored out from recover_annotations.py and 
 ## classify_with_scaling.py
@@ -141,7 +139,52 @@ def get_zero_score_names(models):
 def remove_zero_score_terms_by_name(model, zero_score_names):
     return model.remove_terms(zero_score_names)
 
-def predict(extracted_features_paths, outpath, model_file, rna_path=None, sample=None, vcf_path=None):
+def load_models(model_files):
+    models = []
+    for i, model_path in enumerate(model_files):
+        fifa_install_dir=os.path.dirname(os.getcwd())
+        if model_path == "NYGC1":
+            path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC1.pkl')
+            with open(path, 'rb') as file:
+                model = pickle.load(file)
+            models.append(model)
+        elif model_path == "NYGC2":
+            path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC2.pkl')
+            with open(path, 'rb') as file:
+                model = pickle.load(file)
+            models.append(model)
+        elif re.match(r'^(?:CGCI-)?BLGSP$', model_path):
+            path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-BLGSP.pkl')
+            with open(path, 'rb') as file:
+                model = pickle.load(file)
+            models.append(model)
+        elif re.match(r'^(?:CGCI-)?HTMCP$', model_path):
+            path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-HTMCP.pkl')
+            with open(path, 'rb') as file:
+                model = pickle.load(file)
+            models.append(model)
+        elif not os.path.isfile(model_path):
+            raise FileNotFoundError(f"Model file {model_path} does not exist.")
+        else:
+            model = pickle.load(open(model_path, 'rb'))
+            models.append(model)
+    zero_score_names = get_zero_score_names(models)
+    models = [remove_zero_score_terms_by_name(model, zero_score_names) for model in models]
+    for model in models:
+        model_feature_index = {name: i for i, name in enumerate(model.feature_names_in_)}
+        reorder_indices = [model_feature_index[name] for name in models[0].feature_names_in_]
+        model.feature_names_in_ = [model.feature_names_in_[i] for i in reorder_indices]
+        model.term_names_ = [model.term_names_[i] for i in reorder_indices]
+        model.feature_types_in_ = [model.feature_types_in_[i] for i in reorder_indices] 
+    if len(models) > 1:
+        merged_model = merge_ebms(models)
+        return merged_model
+    else:
+        return models[0]
+
+def predict_with_rna(extracted_features_paths, outpath, 
+                     ebm, sample,
+                     rna_path=None, vcf_path=None):
     global predictions_path 
     global logger 
     
@@ -157,71 +200,11 @@ def predict(extracted_features_paths, outpath, model_file, rna_path=None, sample
             predictions_path = outpath
     except Exception as e:
         print(f"An error occurred: {e}")
-    
-    try: 
-        variants = pd.concat(
-            (pd.read_csv(path).fillna(0) for path in extracted_features_paths), ignore_index=True)
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-    try:
-        if isinstance(model_file, list):
-            models = []
-            for i, model_path in enumerate(model_file.split(',')):
-                fifa_install_dir=os.path.dirname(os.getcwd())
-                if model_path == "NYGC1":
-                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC1.pkl')
-                    with open(path, 'rb') as file:
-                        model = pickle.load(file)
-                    models.append(model)
-                elif model_path == "NYGC2":
-                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC2.pkl')
-                    with open(path, 'rb') as file:
-                        model = pickle.load(file)
-                    models.append(model)
-                elif re.match(r'^(?:CGCI-)?BLGSP$', model_path):
-                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-BLGSP.pkl')
-                    with open(path, 'rb') as file:
-                        model = pickle.load(file)
-                    models.append(model)
-                elif re.match(r'^(?:CGCI-)?HTMCP$', model_path):
-                    path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-HTMCP.pkl')
-                    with open(path, 'rb') as file:
-                        model = pickle.load(file)
-                    models.append(model)
-                elif not os.path.isfile(model_path):
-                    raise FileNotFoundError(f"Model file {model_path} does not exist.")
-                else:
-                    model = pickle.load(open(model_path, 'rb'))
-                    models.append(model)
-            
-            if models.is_empty():
-                raise ValueError("No models were loaded. Please check the input model paths.")
-
-            zero_score_names = get_zero_score_names(models)
-
-            if len(models) > 1:
-                for model in models:
-                    model = remove_zero_score_terms_by_name(model, zero_score_names)
-                    model_feature_index = {name: i for i, name in enumerate(model.feature_names_in_)}
-                    reorder_indices = [model_feature_index[name] for name in models[0].feature_names_in_]
-                    model.feature_names_in_ = [model.feature_names_in_[i] for i in reorder_indices]
-                    model.term_names_ = [model.term_names_[i] for i in reorder_indices]
-                    model.feature_types_in_ = [model.feature_types_in_[i] for i in reorder_indices] 
-
-                ebm =  merge_ebms(models)
-        elif os.path.isfile(model_file):
-            ebm = ExplainableBoostingClassifier()
-            with open(model_file, 'rb') as f:
-                ebm = pickle.load(f)
-        
-            
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(f"The path for your ebm model is incorrect. \n{model_file}")
-    
+    variants = pd.concat(
+        (pd.read_csv(path).fillna(0) for path in extracted_features_paths), 
+        ignore_index=True)
+    sample = variants['Sample'].iloc[0]
     combined_df = make_predictions(ebm, variants)
     rna_annotations = pd.read_csv(rna_path).fillna(0).reset_index()
     rna_annotations = rna_annotations[rna_annotations['SAMPLE'] == sample]
-
-    generate_output_vcf_file(combined_df, rna_annotations, vcf_path)
+    generate_output_vcf_file_rna(combined_df, rna_annotations, vcf_path)

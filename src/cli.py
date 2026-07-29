@@ -9,7 +9,7 @@ import train_new_ebm
 import train_with_hyperparameter
 from merge_models import merge_ebms
 from classify_with_scaling import predict
-from recover_annotations import predict as predict_with_rna
+from recover_annotations import predict_with_rna, load_models
 
 VERSION = 0.1
 
@@ -42,6 +42,8 @@ if __name__ == '__main__':
                                 help='Path to save output files with variants and all extracted features. (default: current directory)')
     feature_parser.add_argument('-l', '--label', nargs=2, default=[None,None],
                                 help='VCF INFO Field with Variant Label and Real/Truth/1 Label. (default: None, None)')
+    feature_parser.add_argument('--skip-mobster', action='store_true',
+                                help='Skip running MOBSTER and omit the Tail score from the extracted feature table.')
     
     ## Argument to choose between my original paralelization scheme or new one after talking with Andre
     ## helpul for testing resource allocation 
@@ -94,7 +96,7 @@ if __name__ == '__main__':
                 vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq)
             else:
                 parallel_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
-                vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq)
+                vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq, skip_mobster=args.skip_mobster)
         except Exception as e:
             logger.error(f"An error occurred: {e}")
 
@@ -108,21 +110,16 @@ if __name__ == '__main__':
         
     elif args.subcommand == 'predict':
         logger.info('Classify variants in a VCF')
-        try:
-            if isinstance(args.model_files, list):
-                model_file = list(args.model_files)
-            else:
-                model_file = args.model_files
-            if(args.rna_annotations):
-                logger.info('Will include RNA annotations (for rescuing FN predictions)')
-                predict_with_rna(extracted_features_paths=list(args.features_path), outpath=args.output_dir, model_file=model_file, 
-                sample=args.sample, vcf_path=args.vcffile, rna_path=args.rna_annotations)   
-            else:
-                predict(extracted_features_paths=list(args.features_path), outpath=args.output_dir, model_file=model_file, 
-                sample=args.sample, vcf_path=args.vcffile)   
-        except Exception as e:
-            logger.error(f"An error occurred: {e}")
-    
+        model_files = list(args.model_files)
+        ebm = load_models(model_files)
+        if(args.rna_annotations):
+            logger.info('Will include RNA annotations (for rescuing FN predictions)')
+            predict_with_rna(extracted_features_paths=args.features_path, outpath=args.output_dir, 
+                             ebm=ebm, sample=args.sample,
+                             vcf_path=args.vcffile, rna_path=args.rna_annotations)   
+        else:
+            predict(extracted_features_paths=args.features_path, outpath=args.output_dir, 
+                    ebm=ebm, sample=args.sample, vcf_path=args.vcffile)
     elif args.subcommand == 'merge':
         logger.info('Merging multiple EBM models')
         merge_ebms(args.input_models, args.output_path)

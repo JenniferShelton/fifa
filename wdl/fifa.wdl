@@ -434,6 +434,80 @@ task Gatk4MergeSortVcf {
 }
 
 
+task ExtractionMobsterFree {
+    input {
+        Bram bram
+        String sampleId
+        String projectId
+        IndexedVcf vcf
+        IndexedReference referenceFa
+        String extractedFeaturesPath = "~{sampleId}_extracted_features.csv"
+        # resources
+        Int threads = 1
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 4
+        Int diskSize
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+
+    }
+    command <<<
+        set -e -o pipefail
+        sampleId="~{sampleId}"
+        bram="~{bram.bram}"
+        projectId="~{projectId}"
+        vcf="~{vcf.vcf}"
+        threads="~{threads}"
+        referenceFa="~{referenceFa.fasta}"
+
+        export TMPDIR=/tmp/
+        mkdir -p ${TMPDIR}
+
+        extension=$( basename ${vcf} | sed 's|.*\.vcf|.vcf|' )
+        vcf_basename=$( basename ${vcf} | sed 's|\.vcf.*||' )
+        new_vcf=${vcf_basename:0:25}${extension}
+        ln -s ${vcf} ${new_vcf}
+
+        vcf_index_extension=$( basename ~{vcf.index} | sed 's|.*\.vcf|.vcf|' )
+        new_vcf_index=${vcf_basename:0:25}${vcf_index_extension}
+        ln -s ~{vcf.index} ${new_vcf_index}
+
+        ln -s ${bram} .
+        ln -s ~{bram.bramIndex} .
+        ln -s ${referenceFa}* .
+
+        # Extract features for the EBM model. This script also extracts the reference sequence context for each variant, which is used in the mutational signature analysis.
+        python3 /opt/fifa/src/cli.py \
+            extract \
+            --skip-mobster \
+            -s ${sampleId} \
+            -c ${projectId} \
+            -v ${new_vcf} \
+            -b $( basename ${bram} ) \
+            -r $( basename ${referenceFa} ) \
+            -o . \
+            -n ${threads}
+    >>>
+
+    output {
+        File extractedFeatures = extractedFeaturesPath
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " HDD"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:2385179f430cef471588ce56cc75b7adee83281964ae8223ff9aaef936382c23"
+        runtime_minutes: "6000"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}
+
 
 task Extraction {
     input {

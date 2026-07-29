@@ -470,7 +470,7 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores):
         mfile.close()
         # os.remove(outfile)
 
-def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file):
+def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=False):
     is_compressed = vcf_path.endswith('.gz')
     has_index = os.path.exists(vcf_path + '.csi') or os.path.exists(vcf_path + '.tbi')
     if not is_compressed:
@@ -489,11 +489,12 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
     num_vars = 0
 
     with Manager() as manager:
-        mobster_scores = manager.dict()
+        mobster_scores = manager.dict() if not skip_mobster else None
         all_features = manager.dict()
 
         pool = [Process(target=process_variant, args=(queue, sample, cohort, bam_path, ref_seq, iolock, all_features)) for i in range(int(num_threads))]
-        pool.insert(0, Process(target=get_mobster_tail_scores, args=(sample, vcf_path, output_file, mobster_scores)))
+        if not skip_mobster:
+            pool.insert(0, Process(target=get_mobster_tail_scores, args=(sample, vcf_path, output_file, mobster_scores)))
         for P in pool:
             P.start()
 
@@ -502,9 +503,12 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
         for P in pool:
             P.join()
         
-        ## Takes care of cases when MOBSTER doesn't run succesfully
-        result = {variant: {**all_features.get(variant, {}),**(mobster_scores.get(variant, {'Tail': 1}))}
-            for variant in all_features.keys()}
+        if skip_mobster:
+            result = {variant: all_features.get(variant, {}) for variant in all_features.keys()}
+        else:
+            ## Takes care of cases when MOBSTER doesn't run succesfully
+            result = {variant: {**all_features.get(variant, {}),**(mobster_scores.get(variant, {'Tail': 1}))}
+                for variant in all_features.keys()}
 
         num_vars = len(all_features)
         to_df = [{'Variant': variant, **metric} for variant, metric in result.items()]
@@ -525,11 +529,11 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
 #################################################################################
 ### PROCESS INPUT FILES #########################################################
     
-def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, label, num_threads): 
+def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, label, num_threads, skip_mobster=False): 
     # try:
     if os.path.isfile(vcf_path) and os.path.isfile(bam_path) and os.path.isfile(ref_seq):
         logger.info(f'Processing BAM file for sample: {sample}')
-        extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file)
+        extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=skip_mobster)
             
     else:
         logger.error("There is an issue with one of your input files.")
@@ -545,7 +549,7 @@ def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, lab
     #     traceback.print_exc()
 
 def process_bam_file(outpath, label, num_threads, sample, vcf_file, 
-bam_file, ref_seq, cohort=None):
+bam_file, ref_seq, cohort=None, skip_mobster=False):
     global logger
     logger = logging.getLogger(__name__)
     
@@ -565,7 +569,7 @@ bam_file, ref_seq, cohort=None):
             output_file=os.path.join(outpath, f"{sample}_extracted_features.csv")
     except Exception as e:
         logger.error(f"process_bam_file error trap:An error occurred: {e}")
-    process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads)
+    process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads, skip_mobster=skip_mobster)
     # except Exception as e:
     #     logger.error(f"process_bam_file error trap:An error occurred: {e}")
 
