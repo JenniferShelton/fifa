@@ -139,10 +139,11 @@ def get_zero_score_names(models):
 def remove_zero_score_terms_by_name(model, zero_score_names):
     return model.remove_terms(zero_score_names)
 
+
 def load_models(model_files):
     models = []
     for i, model_path in enumerate(model_files):
-        fifa_install_dir=os.path.dirname(os.getcwd())
+        fifa_install_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if model_path == "NYGC1":
             path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC1.pkl')
             with open(path, 'rb') as file:
@@ -203,7 +204,6 @@ def predict_with_rna(extracted_features_paths, outpath,
     variants = pd.concat(
         (pd.read_csv(path).fillna(0) for path in extracted_features_paths), 
         ignore_index=True)
-    sample = variants['Sample'].iloc[0]
     combined_df = make_predictions(ebm, variants)
     rna_annotations = pd.read_csv(rna_path).fillna(0).reset_index()
     rna_annotations = rna_annotations[rna_annotations['SAMPLE'] == sample]

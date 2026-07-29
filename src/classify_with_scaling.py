@@ -153,7 +153,7 @@ def remove_zero_score_terms_by_name(model, zero_score_names):
     return model.remove_terms(zero_score_names)
 
 def predict(extracted_features_paths, outpath, 
-            ebm, sample,
+            ebm,
             pairs_path=None, vcf_path=None):
     global predictions_path 
     global logger 

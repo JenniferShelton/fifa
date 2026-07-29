@@ -119,7 +119,7 @@ if __name__ == '__main__':
                              vcf_path=args.vcffile, rna_path=args.rna_annotations)   
         else:
             predict(extracted_features_paths=args.features_path, outpath=args.output_dir, 
-                    ebm=ebm, sample=args.sample, vcf_path=args.vcffile)
+                    ebm=ebm, vcf_path=args.vcffile)
     elif args.subcommand == 'merge':
         logger.info('Merging multiple EBM models')
         merge_ebms(args.input_models, args.output_path)
