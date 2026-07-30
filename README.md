@@ -52,7 +52,7 @@ echo "alias fifa='python3 PATH_TO_REPO/fifa/src/cli.py'"
 Fifa is available with its required modules and packages as a prebuilt docker image. The DockerFile is distributed in this repo.
 
 ```
-us.gcr.io/nygc-comp-s-fd4e/fifa:0.1
+us.gcr.io/nygc-comp-s-fd4e/fifa:1.0
 ```
 
 
