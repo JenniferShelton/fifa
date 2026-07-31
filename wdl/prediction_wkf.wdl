@@ -37,31 +37,51 @@ workflow PredictionWkf {
         IndexedReference referenceFa
         File? optionalRnaFile
         Array[File] models
+        Boolean mobsterFree = false
         # resources
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
     }
     Int diskSize = ceil(size(bram.bram, "GB")) * 3
-    call fifa.Extraction {
-        input:
-            bram = bram,
-            sampleId = sampleId,
-            projectId = projectId,
-            vcf = vcf,
-            referenceFa = referenceFa,
-            diskSize = diskSize,
-            qos = qos,
-            partition = partition,
-            cpuPlatform = cpuPlatform
+
+    if (mobsterFree) {
+        call fifa.ExtractionMobsterFree {
+            input:
+                bram = bram,
+                sampleId = sampleId,
+                projectId = projectId,
+                vcf = vcf,
+                referenceFa = referenceFa,
+                diskSize = diskSize,
+                qos = qos,
+                partition = partition,
+                cpuPlatform = cpuPlatform
+        }
     }
+    if (!mobsterFree) {
+        call fifa.Extraction {
+            input:
+                bram = bram,
+                sampleId = sampleId,
+                projectId = projectId,
+                vcf = vcf,
+                referenceFa = referenceFa,
+                diskSize = diskSize,
+                qos = qos,
+                partition = partition,
+                cpuPlatform = cpuPlatform
+        }
+    }
+
+    File extractedFeaturesRun = select_first([Extraction.extractedFeatures, ExtractionMobsterFree.extractedFeatures]) 
 
     if (defined(optionalRnaFile)) {
         call fifa.PredictionWithRna {
             input:
                 sampleId = sampleId,
                 vcf = vcf,
-                extractedFeatures = Extraction.extractedFeatures,
+                extractedFeatures = extractedFeaturesRun,
                 models = models,
                 optionalRnaFile = optionalRnaFile
         }
@@ -72,13 +92,13 @@ workflow PredictionWkf {
             input:
                 sampleId = sampleId,
                 vcf = vcf,
-                extractedFeatures = Extraction.extractedFeatures,
+                extractedFeatures = extractedFeaturesRun,
                 models = models
         }
     }
     File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])
     output {
-        File extractedFeatures = Extraction.extractedFeatures
+        File extractedFeatures = extractedFeaturesRun
         File fifaVcf = fifaVcfRun
     }
 }

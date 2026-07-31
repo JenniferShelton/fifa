@@ -50,6 +50,7 @@ workflow PredictionBucketedWkf {
         IndexedReference referenceFa
         File? optionalRnaFile
         Array[File] models
+        Boolean mobsterFree = false
         # resources
         String? gcpProject 
         File? serviceAccountKey
@@ -193,6 +194,7 @@ workflow PredictionBucketedWkf {
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     optionalRnaFile = rnaFile,
                     models = models,
+                    mobsterFree = mobsterFree,
                     referenceFa = referenceFa,
                     qos = qos,
                     partition = partition,

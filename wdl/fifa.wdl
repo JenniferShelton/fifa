@@ -26,6 +26,8 @@ version 1.0
 # An explainable boosting machine model for identifying artifacts caused by formalin-fixed paraffin embedding
 import "wdl_structs.wdl"
 
+# --skip-mobster
+
 
 task ReorderVcfColumns {
     input {
