@@ -5,6 +5,7 @@ FROM python:3.10-slim-bookworm AS builder
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    wget \
     bzip2 \
     libcurl4-openssl-dev \
     libssl-dev \
@@ -41,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     libtinfo6 \
     zlib1g \
     curl \
+    wget \
     gnupg \
     ca-certificates \
     apt-transport-https \
@@ -132,21 +134,14 @@ RUN python -m pip install --no-cache-dir --no-build-isolation \
     "pysam==0.15.4" \
     && python -m pip install --no-cache-dir --upgrade "setuptools<82" \
     && python -c "import pkg_resources, pybind11, numpy, pysam"
-COPY requirements.txt /tmp/build/requirements.txt
-RUN python -m pip install --no-build-isolation --no-cache-dir -r /tmp/build/requirements.txt
+RUN set -eux; \
+    mkdir -p /tmp/build; \
+    wget https://raw.githubusercontent.com/JenniferShelton/fifa/refs/heads/main/requirements.txt -O /tmp/build/requirements.txt; \
+    python -m pip install --no-build-isolation --no-cache-dir -r /tmp/build/requirements.txt
 
 # Copy compiled binaries and libraries from the builder stage
 COPY --from=builder /opt/samtools /opt/samtools
 
-# Copy authentication helper scripts
-COPY gcs_env_wrapper.sh /usr/local/bin/gcs_env_wrapper.sh
-
-# Set executable permissions, create symlinks, and configure path
-RUN chmod +x /usr/local/bin/gcs_env_wrapper.sh \
-    && ln -s /usr/local/bin/gcs_env_wrapper.sh /usr/local/bin/samtools \
-    && ln -s /usr/local/bin/gcs_env_wrapper.sh /usr/local/bin/bgzip \
-    && ln -s /usr/local/bin/gcs_env_wrapper.sh /usr/local/bin/tabix \
-    && ln -s /usr/local/bin/gcs_env_wrapper.sh /usr/local/bin/htsfile
 
 # Install FIFA into an empty directory; cloning into the copied build context
 # fails once that context contains files.
