@@ -299,7 +299,7 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
         if 'Label' in rec.keys():
             metrics.set_metric('Label', rec['Label'])
 
-        if len(sample_data.get('AD')) <= 1 :
+        if sample_data.get('AD') is None or len(sample_data.get('AD')) <= 1 :
             continue
 
         dp = sample_data.get('DP')
@@ -494,14 +494,50 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
 
         pool = [Process(target=process_variant, args=(queue, sample, cohort, bam_path, ref_seq, iolock, all_features)) for i in range(int(num_threads))]
         if not skip_mobster:
-            pool.insert(0, Process(target=get_mobster_tail_scores, args=(sample, vcf_path, output_file, mobster_scores)))
+            mobster_process = Process(target=get_mobster_tail_scores, args=(sample, vcf_path, output_file, mobster_scores), name="mobster_tail_scores")
+            pool.insert(0, mobster_process)
         for P in pool:
             P.start()
 
         read_vcf(sample, label, vcf_path, queue, num_threads)
 
+        failed_process = None
+        while True:
+            alive_processes = [P for P in pool if P.is_alive()]
+            failed_processes = [P for P in pool if P.exitcode not in (None, 0)]
+            failed_processes = [P for P in failed_processes if P.name != "mobster_tail_scores"]
+
+            if failed_processes:
+                failed_process = failed_processes[0]
+                logger.error(
+                    "Worker %s failed with exit code %s; terminating remaining workers",
+                    failed_process.name,
+                    failed_process.exitcode,
+                )
+                for P in pool:
+                    if P.is_alive():
+                        P.terminate()
+                break
+
+            if not alive_processes:
+                break
+
+            time.sleep(0.2)
+
         for P in pool:
             P.join()
+
+        if failed_process is not None:
+            raise RuntimeError(
+                f"Feature extraction failed because worker {failed_process.name} exited with code {failed_process.exitcode}"
+            )
+
+        mobster_process = next((P for P in pool if P.name == "mobster_tail_scores"), None)
+        if mobster_process is not None and mobster_process.exitcode not in (None, 0):
+            logger.warning(
+                "MOBSTER worker exited with code %s; continuing with Tail=1 defaults",
+                mobster_process.exitcode,
+            )
         
         if skip_mobster:
             result = {variant: all_features.get(variant, {}) for variant in all_features.keys()}
