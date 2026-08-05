@@ -88,17 +88,17 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.subcommand == 'extract':
-        try:
-            logger.info('Extracting features from BAM/VCF files')
-            if args.original_parallel:
-                logger.info('Using original parallelization scheme. Less efficient than latest version (omit -p flag)')
-                regular_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
-                vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq)
-            else:
-                parallel_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
-                vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq, skip_mobster=args.skip_mobster)
-        except Exception as e:
-            logger.error(f"An error occurred: {e}")
+        # try:
+        logger.info('Extracting features from BAM/VCF files')
+        if args.original_parallel:
+            logger.info('Using original parallelization scheme. Less efficient than latest version (omit -p flag)')
+            regular_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
+            vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq)
+        else:
+            parallel_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
+            vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq, skip_mobster=args.skip_mobster)
+        # except Exception as e:
+        #     logger.error(f"An error occurred: {e}")
 
     elif args.subcommand == 'retrain':
         logger.info('Training new EBM model with user-inputted cohort')
