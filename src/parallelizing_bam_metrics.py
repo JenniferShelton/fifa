@@ -505,7 +505,6 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
         while True:
             alive_processes = [P for P in pool if P.is_alive()]
             failed_processes = [P for P in pool if P.exitcode not in (None, 0)]
-            failed_processes = [P for P in failed_processes if P.name != "mobster_tail_scores"]
 
             if failed_processes:
                 failed_process = failed_processes[0]
@@ -530,13 +529,6 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
         if failed_process is not None:
             raise RuntimeError(
                 f"Feature extraction failed because worker {failed_process.name} exited with code {failed_process.exitcode}"
-            )
-
-        mobster_process = next((P for P in pool if P.name == "mobster_tail_scores"), None)
-        if mobster_process is not None and mobster_process.exitcode not in (None, 0):
-            logger.warning(
-                "MOBSTER worker exited with code %s; continuing with Tail=1 defaults",
-                mobster_process.exitcode,
             )
         
         if skip_mobster:

@@ -31,14 +31,14 @@ as_tibble()
 fit <- vcf_data %>%
     dplyr::filter(VAF >= 0.05 & VAF < 1) %>%
     mobster::mobster_fit(
-        .,   
-        K = c(1,2,3), 
-        samples = 1, 
+        .,
+        K = c(1,2,3),
+        samples = 1,
         init = 'random',
         tail = TRUE,
         epsilon = 1e-06,
-        maxIter = 100, 
-        fit.type = 'MM', 
+        maxIter = 100,
+        fit.type = 'MM',
         seed = 12345,
         model.selection = 'reICL',
         trace = FALSE,
@@ -46,14 +46,25 @@ fit <- vcf_data %>%
         pi_cutoff = 0.02,
         N_cutoff = 10,
         silent=FALSE
-    )
+    ) %>%
+    try()
 
-sample_data <- vcf_data %>%
-    dplyr::left_join(Clusters(fit$best), by=c('chrom', 'pos', 'REF', 'ALT')) %>% 
-    dplyr::select(c(chrom,pos,REF,ALT,Tail)) %>%
-    dplyr::mutate(Tail = tidyr::replace_na(Tail, 1),
+if (inherits(fit, "try-error")) {
+    warning(sprintf("ERROR: MOBSTER failed to fit variants %s for sample %s",
+                    basename(vcf_path), FFPE))
+
+    sample_data <- vcf_data %>%
+      mutate(Tail = 1,
+             sample=sample) %>%
+      dplyr::select(c(sample,chrom,pos,REF,ALT,Tail))
+} else {
+  sample_data <- vcf_data %>%
+      dplyr::left_join(Clusters(fit$best), by=c('chrom', 'pos', 'REF', 'ALT')) %>%
+      dplyr::select(c(chrom,pos,REF,ALT,Tail)) %>%
+      dplyr::mutate(Tail = tidyr::replace_na(Tail, 1),
                     sample=sample) %>%
-    dplyr::select(c(sample,chrom,pos,REF,ALT,Tail))
+      dplyr::select(c(sample,chrom,pos,REF,ALT,Tail))
+}
 
 write.csv(sample_data, file=path_out, row.names=FALSE)
 
