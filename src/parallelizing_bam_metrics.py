@@ -15,6 +15,7 @@ import pandas as pd # type: ignore
 import csv
 import os, sys
 import re
+import queue as queue_module
 from scipy.stats import entropy # type: ignore
 from Bio.SeqUtils import gc_fraction # type: ignore
 from concurrent.futures import ProcessPoolExecutor
@@ -25,6 +26,7 @@ import time
 import logging
 from metrics_dictionary import MetricsDictionary
 from metrics_dictionary import safe_median
+import unicodedata
 
 ################################################################### /MODULES ###
 ################################################################################
@@ -295,129 +297,139 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
         variant_id = '{0}:{1}_{2}>{3}'.format(chrom, pos, ref, alt)
 
         metrics = MetricsDictionary(cohort=cohort, sample=sample, index=vcf_index) 
-        # try :
-        if 'Label' in rec.keys():
-            metrics.set_metric('Label', rec['Label'])
+        try :
+            if 'Label' in rec.keys():
+                metrics.set_metric('Label', rec['Label'])
 
-        if sample_data.get('AD') is None or len(sample_data.get('AD')) <= 1 :
-            continue
+            if sample_data.get('AD') is None or len(sample_data.get('AD')) <= 1 :
+                continue
 
-        dp = sample_data.get('DP')
-        metrics.set_metric('tumor_depth', sum(dp) if isinstance(dp, (list, tuple)) else dp)
+            dp = sample_data.get('DP')
+            metrics.set_metric('tumor_depth', sum(dp) if isinstance(dp, (list, tuple)) else dp)
 
-        if 'AF' in sample_data.keys():
-            af = sample_data.get('AF')
-            metrics.set_metric('tumor_VAF', af if isinstance(af, float) else af[0])
+            if 'AF' in sample_data.keys():
+                af = sample_data.get('AF')
+                metrics.set_metric('tumor_VAF', af if isinstance(af, float) else af[0])
 
-        for pileupcolumn in bamfile.pileup(contig=chrom, start=pos - 1, stop=pos, min_base_quality=0, min_mapping_quality=0):
-            if pileupcolumn.pos == pos - 1:
-                for pileupread in pileupcolumn.pileups:
-                    metrics.increment_metric('num_total_reads')
-                    query_index = pileupread.query_position
-                    read = pileupread.alignment
-                    
-                    ## This is probably inefficient... there must be ways to do this with pysam without
-                    ## the need for extra methods 
-                    read_index, distance_5prime, distance_3prime, clipped_length = \
-                        process_cigar_tupples(read, pos)
-
-                    if query_index is None \
-                            or query_index < 0 \
-                            or read_index is None:
-                        # Pretty sure that this is a problem when a read spans an indel
-                        continue
-
-                    base = read.query_sequence[query_index]
-                    is_ref = base == ref
-                    is_var = base == alt
-
-                    
-                    if is_read_filtered(read):
-                        metrics.increment_metric('tumor_reads_filtered')
-
-                    if is_ref or is_var: 
-                        prefix='tumor_ref' if is_ref else 'tumor_var'
-                        metrics.increment_metric('tumor_ref_count' if is_ref else 'tumor_var_count')
-                        metrics.increment_metric(f'{prefix}_num_minus_strand' if read.is_reverse else f'{prefix}_num_plus_strand')
+            for pileupcolumn in bamfile.pileup(contig=chrom, start=pos - 1, stop=pos, min_base_quality=0, min_mapping_quality=0):
+                if pileupcolumn.pos == pos - 1:
+                    for pileupread in pileupcolumn.pileups:
+                        metrics.increment_metric('num_total_reads')
+                        query_index = pileupread.query_position
+                        read = pileupread.alignment
                         
-                        metrics.add_metric(f'{prefix}_base_qualities', read.query_qualities[query_index])
-                        metrics.add_metric(f'{prefix}_read_frag_length', read.infer_read_length())
-                        metrics.add_metric(f'{prefix}_avg_pos_as_fraction', (read_index / (read.infer_read_length() / 2)))
-                        metrics.add_metric(f'{prefix}_distances_to_5p_end', distance_5prime)
-                        metrics.add_metric(f'{prefix}_distances_to_3p_end', distance_3prime)
-                        metrics.add_metric(f'{prefix}_clipped_length', clipped_length)
+                        ## This is probably inefficient... there must be ways to do this with pysam without
+                        ## the need for extra methods 
+                        read_index, distance_5prime, distance_3prime, clipped_length = \
+                            process_cigar_tupples(read, pos)
 
-                        if read.is_paired:
-                            ## this is because we used to track the mapq of unpaired reads seperatly 
-                            metrics.add_metric(f'{prefix}_mapping_quality', read.mapping_quality)
+                        if query_index is None \
+                                or query_index < 0 \
+                                or read_index is None:
+                            # Pretty sure that this is a problem when a read spans an indel
+                            continue
 
-                        if read.has_tag('MD'):
-                            num_mismatches, mismatch_base_quals = get_mismatch_and_insertion_positions(read)
-                            metrics.add_metric('avg_num_mismatches', num_mismatches / read.infer_read_length())
-                            if mismatch_base_quals:
-                                metrics.add_metric('avg_sum_mismatch_base_quals',(sum(mismatch_base_quals)))   
-                    else:
-                        metrics.increment_metric('tumor_other_bases_count')                   
+                        base = read.query_sequence[query_index]
+                        is_ref = base == ref
+                        is_var = base == alt
+
+                        
+                        if is_read_filtered(read):
+                            metrics.increment_metric('tumor_reads_filtered')
+
+                        if is_ref or is_var: 
+                            prefix='tumor_ref' if is_ref else 'tumor_var'
+                            metrics.increment_metric('tumor_ref_count' if is_ref else 'tumor_var_count')
+                            metrics.increment_metric(f'{prefix}_num_minus_strand' if read.is_reverse else f'{prefix}_num_plus_strand')
+                            
+                            metrics.add_metric(f'{prefix}_base_qualities', read.query_qualities[query_index])
+                            metrics.add_metric(f'{prefix}_read_frag_length', read.infer_read_length())
+                            metrics.add_metric(f'{prefix}_avg_pos_as_fraction', (read_index / (read.infer_read_length() / 2)))
+                            metrics.add_metric(f'{prefix}_distances_to_5p_end', distance_5prime)
+                            metrics.add_metric(f'{prefix}_distances_to_3p_end', distance_3prime)
+                            metrics.add_metric(f'{prefix}_clipped_length', clipped_length)
+
+                            if read.is_paired:
+                                ## this is because we used to track the mapq of unpaired reads seperatly 
+                                metrics.add_metric(f'{prefix}_mapping_quality', read.mapping_quality)
+
+                            if read.has_tag('MD'):
+                                num_mismatches, mismatch_base_quals = get_mismatch_and_insertion_positions(read)
+                                metrics.add_metric('avg_num_mismatches', num_mismatches / read.infer_read_length())
+                                if mismatch_base_quals:
+                                    metrics.add_metric('avg_sum_mismatch_base_quals',(sum(mismatch_base_quals)))   
+                        else:
+                            metrics.increment_metric('tumor_other_bases_count')                   
+            
+            metrics.aggregate_base_metrics(ref, alt) 
+
+            ## Get Window-Based Metrics
+            left = max(pos - 500, 0)
+            right = min(pos + 500, bamfile.get_reference_length(chrom))
+
+            left_window = [max(0, left - 500), left]
+            right_window = [right, min(right + 500, bamfile.get_reference_length(chrom))]
+            
+            alignment_seq = fastafile.fetch(chrom, left, right)
+
+            metrics.set_metric('window_gc_cont', gc_fraction(alignment_seq))
+            metrics.set_metric('window_seq_entropy', entropy(np.unique(list(alignment_seq), return_counts=True)[1] / len(alignment_seq), base=2))
+            
+            median_cov, cov_variance = get_coverage_in_window(bamfile, fastafile, chrom, left, right)
+            if median_cov is None or median_cov == 0:
+                metrics.set_metric('window_min_cov_ratio', None)
+                metrics.set_metric('window_max_cov_ratio', None)
+                continue
+            metrics.set_metric('window_median_cov', median_cov)
+            metrics.set_metric('window_cov_variance', cov_variance)
+            
+            left_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *left_window)[0]
+            right_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *right_window)[0]
+
+            left_window_median_cov = left_window_median_cov if left_window_median_cov is not None else 0
+            right_window_median_cov = right_window_median_cov if right_window_median_cov is not None else 0
+
+            metrics.update_coverage_ratios(left=left_window_median_cov, right=right_window_median_cov)
+
+            fractions = get_read_fractions(bamfile, chrom, left, right)
+            metrics.set_metric('window_median_frag_len', fractions[0])
+            metrics.set_metric('window_dup_frac', fractions[1])
+            metrics.set_metric('window_multi_frac', fractions[2])
+            metrics.set_metric('window_improper_frac', fractions[3])
+            metrics.set_metric('window_median_mapq', fractions[4])
+            metrics.set_metric('window_read_filter_frac', fractions[5])
+
+            ## Just changed to extract tri-/penta-nucleotide sequence (although this assumes that the variant is not
+            ## at the last position in the chromosome, is that ok ? )
+
+            sequence = fastafile.fetch(chrom, pos - 3, pos + 1)
+            metrics.set_metric('trinucleotide_context', sequence[1:3])
+            metrics.set_metric('pentanucleotide_context', sequence)
         
-        metrics.aggregate_base_metrics(ref, alt) 
-
-        ## Get Window-Based Metrics
-        left = max(pos - 500, 0)
-        right = min(pos + 500, bamfile.get_reference_length(chrom))
-
-        left_window = [max(0, left - 500), left]
-        right_window = [right, min(right + 500, bamfile.get_reference_length(chrom))]
-        
-        alignment_seq = fastafile.fetch(chrom, left, right)
-
-        metrics.set_metric('window_gc_cont', gc_fraction(alignment_seq))
-        metrics.set_metric('window_seq_entropy', entropy(np.unique(list(alignment_seq), return_counts=True)[1] / len(alignment_seq), base=2))
-        
-        median_cov, cov_variance = get_coverage_in_window(bamfile, fastafile, chrom, left, right)
-        if median_cov is None or median_cov == 0:
-            metrics.set_metric('window_min_cov_ratio', None)
-            metrics.set_metric('window_max_cov_ratio', None)
-            continue
-        metrics.set_metric('window_median_cov', median_cov)
-        metrics.set_metric('window_cov_variance', cov_variance)
-        
-        left_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *left_window)[0]
-        right_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *right_window)[0]
-
-        left_window_median_cov = left_window_median_cov if left_window_median_cov is not None else 0
-        right_window_median_cov = right_window_median_cov if right_window_median_cov is not None else 0
-
-        metrics.update_coverage_ratios(left=left_window_median_cov, right=right_window_median_cov)
-
-        fractions = get_read_fractions(bamfile, chrom, left, right)
-        metrics.set_metric('window_median_frag_len', fractions[0])
-        metrics.set_metric('window_dup_frac', fractions[1])
-        metrics.set_metric('window_multi_frac', fractions[2])
-        metrics.set_metric('window_improper_frac', fractions[3])
-        metrics.set_metric('window_median_mapq', fractions[4])
-        metrics.set_metric('window_read_filter_frac', fractions[5])
-
-        ## Just changed to extract tri-/penta-nucleotide sequence (although this assumes that the variant is not
-        ## at the last position in the chromosome, is that ok ? )
-
-        sequence = fastafile.fetch(chrom, pos - 3, pos + 1)
-        metrics.set_metric('trinucleotide_context', sequence[1:3])
-        metrics.set_metric('pentanucleotide_context', sequence)
-        
-        # except Exception as e:
-            # logger.error(f"process_variant (very large) error trap: An error occurred: {e}")
-            # iolock.acquire()
-            # final_dictionary[variant_id] = {}
-            # iolock.release()
-            # continue
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            logger.error(f"process_variant (very large) error trap: An error occurred: {e}")
+            bamfile.close()
+            fastafile.close()
+            raise SystemExit(1)
 
         iolock.acquire()
         final_dictionary[variant_id] = metrics.get_all_metrics()
         iolock.release()
 
-def read_vcf(sample, label, vcf_path, queue, num_threads):
+def read_vcf(sample, label, vcf_path, queue, num_threads, processes=None):
+    def fail_if_worker_failed():
+        if not processes:
+            return
+        failed_processes = [P for P in processes if P.exitcode not in (None, 0)]
+        if failed_processes:
+            failed_process = failed_processes[0]
+            exit_code = failed_process.exitcode if failed_process.exitcode is not None else 1
+            raise SystemExit(exit_code)
+
     vcffile = pysam.VariantFile(vcf_path) 
     for index, rec in enumerate(vcffile.fetch()):
+        fail_if_worker_failed()
         if rec.ref not in ['A', 'C', 'T', 'G'] or rec.alts[0] not in ['A', 'C', 'T', 'G']:
             continue
 
@@ -430,11 +442,25 @@ def read_vcf(sample, label, vcf_path, queue, num_threads):
         
         if label[0] and label[1]:
             rec_dict['Label'] = 1 if rec.info.get(label[0]) == label[1] else 0
-        
-        queue.put((rec_dict, sample_data, index)) 
+
+        queued = False
+        while not queued:
+            fail_if_worker_failed()
+            try:
+                queue.put((rec_dict, sample_data, index), timeout=0.2)
+                queued = True
+            except queue_module.Full:
+                continue
 
     for i in range(int(num_threads)):
-        queue.put((None, None, None))
+        queued = False
+        while not queued:
+            fail_if_worker_failed()
+            try:
+                queue.put((None, None, None), timeout=0.2)
+                queued = True
+            except queue_module.Full:
+                continue
 
     vcffile.close()
 
@@ -453,22 +479,27 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores):
     
     logger.info(process.stdout.decode('unicode_escape'))
     logger.error(process.stderr.decode('unicode_escape'))
-    
-    if not os.path.isfile(outfile):
-        logger.info(f"MOBSTER did not run succesfully on {sample}")
-    else:    
-        with open(outfile, newline='') as mfile:
-            logger.info(f"Finished MOBSTER calculations for {sample}")
-            reader = csv.reader(mfile, delimiter=',')
-            header = next(reader)
-            for row in reader: 
-                sample, chrom, pos, REF, ALT, Tail = row
-                if REF not in ['A', 'C', 'T', 'G'] or ALT not in ['A', 'C', 'T', 'G']:
-                    continue
-                variant_id = '{0}:{1}_{2}>{3}'.format(chrom, pos, REF, ALT)
-                mobster_scores[variant_id] = {'Tail': Tail}
-        mfile.close()
-        # os.remove(outfile)
+    print('MOBSTER DETAILS:', process.returncode, process.stdout.decode('unicode_escape'), process.stderr.decode('unicode_escape'))
+    if process.returncode != 0:
+        logger.error(
+            "MOBSTER subprocess failed with exit code %s for sample %s",
+            process.returncode,
+            sample,
+        )
+        raise SystemExit(process.returncode)
+       
+    with open(outfile, newline='') as mfile:
+        logger.info(f"Finished MOBSTER calculations for {sample}")
+        reader = csv.reader(mfile, delimiter=',')
+        header = next(reader)
+        for row in reader: 
+            sample, chrom, pos, REF, ALT, Tail = row
+            if REF not in ['A', 'C', 'T', 'G'] or ALT not in ['A', 'C', 'T', 'G']:
+                continue
+            variant_id = '{0}:{1}_{2}>{3}'.format(chrom, pos, REF, ALT)
+            mobster_scores[variant_id] = {'Tail': Tail}
+    mfile.close()
+    os.remove(outfile)
 
 def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=False):
     is_compressed = vcf_path.endswith('.gz')
@@ -499,37 +530,64 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
         for P in pool:
             P.start()
 
-        read_vcf(sample, label, vcf_path, queue, num_threads)
-
         failed_process = None
-        while True:
-            alive_processes = [P for P in pool if P.is_alive()]
+        failed_exit_code = None
+        try:
+            read_vcf(sample, label, vcf_path, queue, num_threads, processes=pool)
+        except SystemExit as e:
             failed_processes = [P for P in pool if P.exitcode not in (None, 0)]
+            failed_process = failed_processes[0] if failed_processes else None
+            failed_exit_code = failed_process.exitcode if failed_process is not None else (e.code if isinstance(e.code, int) else 1)
+            logger.error(
+                "Detected worker failure during VCF enqueue; terminating remaining workers"
+            )
+            for P in pool:
+                if P.is_alive():
+                    P.terminate()
 
-            if failed_processes:
-                failed_process = failed_processes[0]
-                logger.error(
-                    "Worker %s failed with exit code %s; terminating remaining workers",
-                    failed_process.name,
-                    failed_process.exitcode,
-                )
-                for P in pool:
-                    if P.is_alive():
-                        P.terminate()
-                break
+        if failed_exit_code is None:
+            while True:
+                alive_processes = [P for P in pool if P.is_alive()]
+                failed_processes = [P for P in pool if P.exitcode not in (None, 0)]
 
-            if not alive_processes:
-                break
+                if failed_processes:
+                    failed_process = failed_processes[0]
+                    logger.error(
+                        "Worker %s failed with exit code %s; terminating remaining workers",
+                        failed_process.name,
+                        failed_process.exitcode,
+                    )
+                    for P in pool:
+                        if P.is_alive():
+                            P.terminate()
+                    break
 
-            time.sleep(0.2)
+                if not alive_processes:
+                    break
+
+                time.sleep(0.2)
 
         for P in pool:
-            P.join()
+            P.join(timeout=5)
+            if P.is_alive():
+                logger.error("Worker %s did not terminate cleanly; force killing", P.name)
+                try:
+                    P.kill()
+                except AttributeError:
+                    P.terminate()
+                P.join(timeout=5)
 
         if failed_process is not None:
-            raise RuntimeError(
-                f"Feature extraction failed because worker {failed_process.name} exited with code {failed_process.exitcode}"
+            exit_code = failed_process.exitcode if failed_process.exitcode is not None else 1
+            logger.error(
+                "Feature extraction exiting with worker failure code %s from %s",
+                exit_code,
+                failed_process.name,
             )
+            raise SystemExit(exit_code)
+        if failed_exit_code is not None:
+            logger.error("Feature extraction exiting with worker failure code %s", failed_exit_code)
+            raise SystemExit(failed_exit_code)
         
         if skip_mobster:
             result = {variant: all_features.get(variant, {}) for variant in all_features.keys()}
