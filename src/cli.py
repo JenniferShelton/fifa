@@ -44,6 +44,8 @@ if __name__ == '__main__':
                                 help='VCF INFO Field with Variant Label and Real/Truth/1 Label. (default: None, None)')
     feature_parser.add_argument('--skip-mobster', action='store_true',
                                 help='Skip running MOBSTER and omit the Tail score from the extracted feature table.')
+    feature_parser.add_argument('--mobster-fit-rds', default=None,
+                                help='Path to precomputed MOBSTER fit .rds file. If provided, fitting step is skipped and this fit is used.')
     
     ## Argument to choose between my original paralelization scheme or new one after talking with Andre
     ## helpul for testing resource allocation 
@@ -96,7 +98,8 @@ if __name__ == '__main__':
             vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq)
         else:
             parallel_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
-            vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq, skip_mobster=args.skip_mobster)
+            vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq, skip_mobster=args.skip_mobster,
+            mobster_fit_rds=args.mobster_fit_rds)
         # except Exception as e:
         #     logger.error(f"An error occurred: {e}")
 

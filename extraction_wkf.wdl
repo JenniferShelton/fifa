@@ -35,7 +35,6 @@ workflow ExtractionWkf {
         String projectId
         IndexedVcf vcf
         IndexedReference referenceFa
-        File? optionalRnaFile
         # resources
         String qos = "compbio"
         String partition = "cpu"

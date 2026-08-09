@@ -301,7 +301,7 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
             if 'Label' in rec.keys():
                 metrics.set_metric('Label', rec['Label'])
 
-            if sample_data.get('AD') is None or len(sample_data.get('AD')) <= 1 :
+            if sample_data.get('AD') is not None and len(sample_data.get('AD')) <= 1 :
                 continue
 
             dp = sample_data.get('DP')
@@ -464,29 +464,52 @@ def read_vcf(sample, label, vcf_path, queue, num_threads, processes=None):
 
     vcffile.close()
 
-def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores):
+def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores, mobster_fit_rds=None):
     outfile = os.path.join(os.path.dirname(out_path), f'{sample}_mobster.csv')
+    fitfile = os.path.join(os.path.dirname(out_path), f'{sample}_mobster_fit.rds')
+    generated_fitfile = False
 
     script_path = os.path.abspath(__file__)
     directory_name = os.path.dirname(script_path)
 
-    process = subprocess.run(
-        # ['Rscript', directory_name + '/run_mobster.R', sample, vcf_path, outfile],
-        [directory_name + '/run_mobster.R', sample, vcf_path, outfile],
+    if mobster_fit_rds is not None:
+        fitfile = mobster_fit_rds
+        if not os.path.exists(fitfile):
+            logger.error("Provided MOBSTER fit file does not exist: %s", fitfile)
+            raise SystemExit(1)
+    else:
+        fit_process = subprocess.run(
+            [directory_name + '/run_mobster_fit.R', sample, vcf_path, fitfile],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+            )
+
+        logger.info(fit_process.stdout.decode('unicode_escape'))
+        logger.error(fit_process.stderr.decode('unicode_escape'))
+        if fit_process.returncode != 0:
+            logger.error(
+                "MOBSTER fit subprocess failed with exit code %s for sample %s",
+                fit_process.returncode,
+                sample,
+            )
+            raise SystemExit(fit_process.returncode)
+        generated_fitfile = True
+
+    sample_data_process = subprocess.run(
+        [directory_name + '/run_mobster_sample_data.R', sample, vcf_path, fitfile, outfile],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
         )
-    
-    logger.info(process.stdout.decode('unicode_escape'))
-    logger.error(process.stderr.decode('unicode_escape'))
-    print('MOBSTER DETAILS:', process.returncode, process.stdout.decode('unicode_escape'), process.stderr.decode('unicode_escape'))
-    if process.returncode != 0:
+
+    logger.info(sample_data_process.stdout.decode('unicode_escape'))
+    logger.error(sample_data_process.stderr.decode('unicode_escape'))
+    if sample_data_process.returncode != 0:
         logger.error(
-            "MOBSTER subprocess failed with exit code %s for sample %s",
-            process.returncode,
+            "MOBSTER sample-data subprocess failed with exit code %s for sample %s",
+            sample_data_process.returncode,
             sample,
         )
-        raise SystemExit(process.returncode)
+        raise SystemExit(sample_data_process.returncode)
        
     with open(outfile, newline='') as mfile:
         logger.info(f"Finished MOBSTER calculations for {sample}")
@@ -499,9 +522,11 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores):
             variant_id = '{0}:{1}_{2}>{3}'.format(chrom, pos, REF, ALT)
             mobster_scores[variant_id] = {'Tail': Tail}
     mfile.close()
+    if generated_fitfile and os.path.exists(fitfile):
+        os.remove(fitfile)
     os.remove(outfile)
 
-def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=False):
+def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=False, mobster_fit_rds=None):
     is_compressed = vcf_path.endswith('.gz')
     has_index = os.path.exists(vcf_path + '.csi') or os.path.exists(vcf_path + '.tbi')
     if not is_compressed:
@@ -525,7 +550,7 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
 
         pool = [Process(target=process_variant, args=(queue, sample, cohort, bam_path, ref_seq, iolock, all_features)) for i in range(int(num_threads))]
         if not skip_mobster:
-            mobster_process = Process(target=get_mobster_tail_scores, args=(sample, vcf_path, output_file, mobster_scores), name="mobster_tail_scores")
+            mobster_process = Process(target=get_mobster_tail_scores, args=(sample, vcf_path, output_file, mobster_scores, mobster_fit_rds), name="mobster_tail_scores")
             pool.insert(0, mobster_process)
         for P in pool:
             P.start()
@@ -615,11 +640,11 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
 #################################################################################
 ### PROCESS INPUT FILES #########################################################
     
-def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, label, num_threads, skip_mobster=False): 
+def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, label, num_threads, skip_mobster=False, mobster_fit_rds=None): 
     # try:
     if os.path.isfile(vcf_path) and os.path.isfile(bam_path) and os.path.isfile(ref_seq):
         logger.info(f'Processing BAM file for sample: {sample}')
-        extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=skip_mobster)
+        extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=skip_mobster, mobster_fit_rds=mobster_fit_rds)
             
     else:
         logger.error("There is an issue with one of your input files.")
@@ -635,7 +660,7 @@ def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, lab
     #     traceback.print_exc()
 
 def process_bam_file(outpath, label, num_threads, sample, vcf_file, 
-bam_file, ref_seq, cohort=None, skip_mobster=False):
+bam_file, ref_seq, cohort=None, skip_mobster=False, mobster_fit_rds=None):
     global logger
     logger = logging.getLogger(__name__)
     
@@ -655,7 +680,7 @@ bam_file, ref_seq, cohort=None, skip_mobster=False):
             output_file=os.path.join(outpath, f"{sample}_extracted_features.csv")
     except Exception as e:
         logger.error(f"process_bam_file error trap:An error occurred: {e}")
-    process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads, skip_mobster=skip_mobster)
+    process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads, skip_mobster=skip_mobster, mobster_fit_rds=mobster_fit_rds)
     # except Exception as e:
     #     logger.error(f"process_bam_file error trap:An error occurred: {e}")
 
