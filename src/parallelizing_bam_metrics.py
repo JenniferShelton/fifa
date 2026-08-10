@@ -412,7 +412,6 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
                     metrics.set_metric('tumor_VAF', tumor_var_count / tumor_depth_for_vaf)
                 else:
                     metrics.set_metric('tumor_VAF', 0)
-            
             metrics.aggregate_base_metrics(ref, alt) 
 
             ## Get Window-Based Metrics
@@ -459,18 +458,22 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
             metrics.set_metric('pentanucleotide_context', sequence)
         
         except Exception as e:
+            '''
+            if the commands in the block fail the entire process will be terminated, and the error will be logged.
+            '''
             logger.error(traceback.format_exc())
             logger.error(f"process_variant (very large) error trap: An error occurred: {e}")
-            metrics.set_metric('tumor_depth', 0)
-            metrics.set_metric('tumor_VAF', 0)
-            metrics.set_metric('window_gc_cont', 0)
-            metrics.set_metric('window_seq_entropy', 0)
-            metrics.set_metric('window_median_cov', 0)
-            metrics.set_metric('window_cov_variance', 0)
-            metrics.set_metric('window_min_cov_ratio', None)
-            metrics.set_metric('window_max_cov_ratio', None)
-            metrics.set_metric('trinucleotide_context', "")
-            metrics.set_metric('pentanucleotide_context', "")
+            # metrics.set_metric('tumor_depth', 0)
+            # metrics.set_metric('tumor_VAF', 0)
+            # metrics.set_metric('window_gc_cont', 0)
+            # metrics.set_metric('window_seq_entropy', 0)
+            # metrics.set_metric('window_median_cov', 0)
+            # metrics.set_metric('window_cov_variance', 0)
+            # metrics.set_metric('window_min_cov_ratio', None)
+            # metrics.set_metric('window_max_cov_ratio', None)
+            # metrics.set_metric('trinucleotide_context', "")
+            # metrics.set_metric('pentanucleotide_context', "")
+            raise SystemExit(1)
 
         iolock.acquire()
         final_dictionary[variant_id] = metrics.get_all_metrics()
@@ -623,7 +626,8 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
             failed_process = failed_processes[0] if failed_processes else None
             failed_exit_code = failed_process.exitcode if failed_process is not None else (e.code if isinstance(e.code, int) else 1)
             logger.error(
-                "Detected worker failure during VCF enqueue; terminating remaining workers"
+                "Detected worker failure during VCF enqueue; terminating remaining workers. failed_exit_code: %s",
+                failed_exit_code
             )
             for P in pool:
                 if P.is_alive():
