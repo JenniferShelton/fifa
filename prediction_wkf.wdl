@@ -25,10 +25,10 @@ version 1.0
 # Workflow from https://www.biorxiv.org/content/10.64898/2026.03.10.710815v1
 # An explainable boosting machine model for identifying artifacts caused by formalin-fixed paraffin embedding
 import "wdl/wdl_structs.wdl"
-import "wdl/prediction_wkf.wdl" as extractionWkf
+import "wdl/prediction_wkf.wdl" as predictionSubWkf
 
 
-workflow ExtractionWkfs {
+workflow PredictionWkfs {
     input {
         Array[Bram] brams
         Array[String] sampleIds
@@ -45,7 +45,7 @@ workflow ExtractionWkfs {
     Array[File] rnaFiles = select_first([optionalRnaFiles, []])
     scatter (i in range(length(brams))) {
         if (defined(optionalRnaFiles)) {
-            call extractionWkf.ExtractionWkf as rnaExtractionWkf {
+            call predictionSubWkf.PredictionWkf as rnaPredictionWkfWkf {
                 input:
                     bram = brams[i],
                     sampleId = sampleIds[i],
@@ -60,7 +60,7 @@ workflow ExtractionWkfs {
             }
         }
         if (!defined(optionalRnaFiles)) {
-            call extractionWkf.ExtractionWkf {
+            call predictionSubWkf.PredictionWkf {
                 input:
                     bram = brams[i],
                     sampleId = sampleIds[i],
@@ -73,8 +73,8 @@ workflow ExtractionWkfs {
                     cpuPlatform = cpuPlatform
             }
         }
-        File extractedFeaturesRun = select_first([rnaExtractionWkf.extractedFeatures, ExtractionWkf.extractedFeatures])
-        File fifaVcfRun = select_first([rnaExtractionWkf.fifaVcf, ExtractionWkf.fifaVcf])
+        File extractedFeaturesRun = select_first([rnaPredictionWkfWkf.extractedFeatures, PredictionWkf.extractedFeatures])
+        File fifaVcfRun = select_first([rnaPredictionWkfWkf.fifaVcf, PredictionWkf.fifaVcf])
     }
     output {
         Array[File] extractedFeatures = extractedFeaturesRun

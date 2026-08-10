@@ -203,6 +203,86 @@ task MakeVariantCram {
     }
 }
 
+task MergeSortAlignments {
+    input {
+        Array[File] inputs
+        String outputPath
+        String outputIndexPath
+        IndexedReference referenceFa
+        Int threads = 8
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 16
+        Int diskSize
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+    }
+
+    command <<<
+        set -e -o pipefail
+
+        output_path="~{outputPath}"
+        output_index="~{outputIndexPath}"
+        referenceFa="~{referenceFa.fasta}"
+        threads="~{threads}"
+
+        output_fmt="BAM"
+        if [[ "$output_path" == *.cram ]]; then
+            output_fmt="CRAM"
+        fi
+
+        tmp_dir="sort_merge_tmp"
+        mkdir -p "$tmp_dir"
+
+        sorted_inputs=()
+        for input_file in ~{sep=" " inputs}; do
+            stem=$(basename "$input_file")
+            sorted_path="$tmp_dir/${stem%.*}.sorted.${output_fmt,,}"
+            samtools sort \
+                -@ "$threads" \
+                -m 4G \
+                -O "$output_fmt" \
+                --reference ${referenceFa} \
+                -o "$sorted_path" \
+                "$input_file"
+            sorted_inputs+=("$sorted_path")
+        done
+
+        samtools merge \
+            -@ "$threads" \
+            -f \
+            -O "$output_fmt" \
+            --reference ${referenceFa} \
+            -o "$output_path" \
+            "${sorted_inputs[@]}"
+
+        samtools index \
+            -@ "$threads" \
+            "$output_path" \
+            "$output_index"
+    >>>
+
+    output {
+        Bram mergedBram = object {
+            bram : "~{outputPath}",
+            bramIndex : "~{outputIndexPath}"
+        }
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " HDD"
+        memory : memoryGb + "GB"
+        docker: "us.gcr.io/nygc-comp-s-fd4e/samtoolsgcs@sha256:e44efa1effd03df21f14ce1d7ca586276bee053d64e3420897ae9d4fdf11d1a9"
+        runtime_minutes: "6000"
+        partition: "cpu"
+        cpuPlatform : cpuPlatform
+        qos: qos
+    }
+}
+
 task SplitVcf {
     input {
         File vcf
@@ -502,7 +582,7 @@ task ExtractionMobsterFree {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:42283ac9429809b74e79f9b18d5f947477e08d3e35c7d3e5eb6bd0b8661107c6"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:8a408287d9eef23bfa4bc800f145bb60143ef3550fa50dc3fb6fe61f75ff7d99"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -576,7 +656,7 @@ task Extraction {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:42283ac9429809b74e79f9b18d5f947477e08d3e35c7d3e5eb6bd0b8661107c6"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:8a408287d9eef23bfa4bc800f145bb60143ef3550fa50dc3fb6fe61f75ff7d99"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -626,7 +706,7 @@ task Prediction {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:42283ac9429809b74e79f9b18d5f947477e08d3e35c7d3e5eb6bd0b8661107c6"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:8a408287d9eef23bfa4bc800f145bb60143ef3550fa50dc3fb6fe61f75ff7d99"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
@@ -679,7 +759,7 @@ task PredictionWithRna {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:42283ac9429809b74e79f9b18d5f947477e08d3e35c7d3e5eb6bd0b8661107c6"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:8a408287d9eef23bfa4bc800f145bb60143ef3550fa50dc3fb6fe61f75ff7d99"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -723,7 +803,7 @@ task Merge {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:42283ac9429809b74e79f9b18d5f947477e08d3e35c7d3e5eb6bd0b8661107c6"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:8a408287d9eef23bfa4bc800f145bb60143ef3550fa50dc3fb6fe61f75ff7d99"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
@@ -774,7 +854,7 @@ task ReTraining {
         cpu : threads
         disks: "local-disk " + diskSize + " HDD"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:42283ac9429809b74e79f9b18d5f947477e08d3e35c7d3e5eb6bd0b8661107c6"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:8a408287d9eef23bfa4bc800f145bb60143ef3550fa50dc3fb6fe61f75ff7d99"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
