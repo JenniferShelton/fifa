@@ -136,7 +136,7 @@ task MakeVariantBed {
 
 task MakeVariantCram {
     input {
-        Bam finalBam
+        Bram finalBram
         File features1000Bed
         String sampleId
         String variantCramPath = "~{sampleId}.variantRegions.cram"
@@ -168,7 +168,7 @@ task MakeVariantCram {
         --cram \
         --reference ~{referenceFa.fasta} \
         -L ~{features1000Bed} \
-        ~{finalBam.bam} \
+        ~{finalBram.bram} \
         > ~{variantCramPath}
 
         samtools \
@@ -195,8 +195,8 @@ task MakeVariantCram {
         maxRetries : 2
     }
     parameter_meta {
-        finalBam: {
-            description: "Input BAM filename",
+        finalBram: {
+            description: "Input BRAM filename",
             category: "required",
             localization_optional: true
         }

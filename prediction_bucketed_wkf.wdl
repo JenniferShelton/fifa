@@ -36,6 +36,10 @@ workflow PredictionBucketedWkf {
         String bamDownloadUri
         String baiFilenamePath
         String baiDownloadUri
+        String normalBamFilenamePath
+        String normalBamDownloadUri
+        String normalBaiFilenamePath
+        String normalBaiDownloadUri
         String vcfFilenamePath
         String vcfDownloadUri
         String vcfIndexFilenamePath
@@ -66,7 +70,7 @@ workflow PredictionBucketedWkf {
         Int hpcMaxSplits = 4
         Int hpcMinSplits = 2
     }
-
+    # tumor
     call fifaTasks.Download as bamDownload {
             input:
                 filenamePath = bamFilenamePath,
@@ -84,6 +88,32 @@ workflow PredictionBucketedWkf {
             input:
                 filenamePath = baiFilenamePath,
                 downloadUri = baiDownloadUri,
+                awsConfig = awsConfig,
+                awsCredentials = awsCredentials,
+                endpointUrl = endpointUrl,
+                qos = qos,
+                partition = partition,
+                cpuPlatform = cpuPlatform,
+                diskSize = 4
+        }
+    # 
+    call fifaTasks.Download as normalBamDownload {
+            input:
+                filenamePath = normalBamFilenamePath,
+                downloadUri = normalBamDownloadUri,
+                awsConfig = awsConfig,
+                awsCredentials = awsCredentials,
+                endpointUrl = endpointUrl,
+                qos = qos,
+                partition = partition,
+                cpuPlatform = cpuPlatform,
+                diskSize = bamFileSize + 20
+        }
+
+    call fifaTasks.Download as normalBaiDownload {
+            input:
+                filenamePath = normalBaiFilenamePath,
+                downloadUri = normalBaiDownloadUri,
                 awsConfig = awsConfig,
                 awsCredentials = awsCredentials,
                 endpointUrl = endpointUrl,
@@ -120,9 +150,13 @@ workflow PredictionBucketedWkf {
                 vcf: vcfDownload.download,
                 index: vcfIndexDownload.download
             }
-    Bam bam = object {
-                bam : bamDownload.download,
-                bamIndex : baiDownload.download
+    Bram bram = object {
+                bram : bamDownload.download,
+                bramIndex : baiDownload.download
+            }
+    Bram normalBram = object {
+                bram : normalBamDownload.download,
+                bramIndex : normalBaiDownload.download
             }
     # gather split VCF filenames to avoid glob that can fail on prem
     Int count = 100
@@ -172,7 +206,7 @@ workflow PredictionBucketedWkf {
         }
         call fifaTasks.MakeVariantCram {
             input:
-                finalBam = bam,
+                finalBram = bram,
                 gcpProject = gcpProject,
                 serviceAccountKey = serviceAccountKey,
                 features1000Bed = MakeVariantBed.features1000Bed,
@@ -180,15 +214,16 @@ workflow PredictionBucketedWkf {
                 referenceFa = referenceFa,
                 diskSize = 30
         }
-        Bram bram = object {
+        Bram tumorVariantBram = object {
             bram : MakeVariantCram.variantCram.cram,
             bramIndex : MakeVariantCram.variantCram.cramIndex
         }
+        File tumorVariantBrams = MakeVariantCram.variantCram.cram
         if (defined(optionalRnaFile)) {
             File rnaFile = select_first([optionalRnaFile])
             call predictionWkf.PredictionWkf as rnaPredictionWkf {
                 input:
-                    bram = bram,
+                    bram = tumorVariantBram,
                     sampleId = sampleId,
                     projectId = projectId,
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
@@ -204,7 +239,7 @@ workflow PredictionBucketedWkf {
         if (!defined(optionalRnaFile)) {
             call predictionWkf.PredictionWkf {
                 input:
-                    bram = bram,
+                    bram = tumorVariantBram,
                     sampleId = sampleId,
                     projectId = projectId,
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
@@ -229,8 +264,39 @@ workflow PredictionBucketedWkf {
             referenceFa = referenceFa,
             sortedVcfPath = "~{sampleId}.fifa.vcf"
     }
+    # merge tumor variant BAMs
+    Int tumorVariantBramsSize = ceil(size(tumorVariantBrams, "GB"))
+    call fifaTasks.MergeSortAlignments {
+        input:
+            inputs = tumorVariantBrams,
+            outputPath = "~{sampleId}.tumor.variant.bam",
+            outputIndexPath = "~{sampleId}.tumor.variant.bai",
+            threads = 4,
+            diskSize = (3 * tumorVariantBramsSize),
+            referenceFa = referenceFa
+    }
+
+    call fifaTasks.MakeVariantBed as normalMakeVariantBed {
+            input:
+                vcf = vcf.vcf,
+                sampleId = sampleId,
+                referenceFa = referenceFa,
+                diskSize = 10
+        }
+    call fifaTasks.MakeVariantCram as normalMakeVariantCram {
+        input:
+            finalBram = bram,
+            gcpProject = gcpProject,
+            serviceAccountKey = serviceAccountKey,
+            features1000Bed = normalMakeVariantBed.features1000Bed,
+            sampleId = sampleId,
+            referenceFa = referenceFa,
+            diskSize = 30
+    }
     output {
         File extractedFeatures = ConcateTables.outputTable
         File fifaVcf = Gatk4MergeSortVcf.sortedVcf.vcf
+        Bram tumorVariantCram = MergeSortAlignments.mergedBram
+        Cram normalVariantCram = normalMakeVariantCram.variantCram
     }
 }
