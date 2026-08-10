@@ -171,7 +171,9 @@ class MetricsDictionary:
         self.metrics['tumor_ref_base_quality_frac'] = (var_base_qualities / ref_base_qualities) if (ref_base_qualities > 0) else 0
         
         if self.metrics['tumor_VAF'] is None:
-            self.metrics['tumor_VAF'] = self.metrics['tumor_var_count'] / self.metrics['tumor_depth'] if self.metrics['tumor_depth'] > 0 else 0            
+            tumor_depth = self.metrics.get('tumor_depth')
+            tumor_var_count = self.metrics.get('tumor_var_count', 0)
+            self.metrics['tumor_VAF'] = tumor_var_count / tumor_depth if tumor_depth not in (None, 0) and tumor_depth > 0 else 0
 
     def update_coverage_ratios(self, left, right):
         window_coverage_ratios = (float(left / self.metrics['window_median_cov']), float(right / self.metrics['window_median_cov']))

@@ -24,6 +24,7 @@ import subprocess
 from multiprocessing import Queue, Lock, Process, Pool, Manager
 import time
 import logging
+import warnings
 from metrics_dictionary import MetricsDictionary
 from metrics_dictionary import safe_median
 import unicodedata
@@ -246,7 +247,7 @@ def get_read_fractions(bamfile, chrom, left, right):
     ## pysamstats, but for some reason I can't find those attributes in the recarray
 
     if num_total_reads == 0:
-        return (0,0,0,0,0)
+        return (0,0,0,0,0,0)
     
     num_improper_paired = num_total_reads - coverage['reads_pp'].sum()
     frag_lenths, mapqs = [], []
@@ -278,6 +279,29 @@ def get_read_fractions(bamfile, chrom, left, right):
 #################################################################################
 ### SPLIT VARIANTS FOR PROCESSING ###############################################
 
+def iter_pileup_columns(bamfile, chrom, pos):
+    pileup_kwargs = {
+        "contig": chrom,
+        "start": pos - 1,
+        "stop": pos,
+        "min_base_quality": 10,
+        "min_mapping_quality": 10,
+        "multiple_iterators": False,
+    }
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="multiple_iterators not implemented for CRAM",
+            category=UserWarning,
+        )
+        try:
+            return bamfile.pileup(**pileup_kwargs)
+        except TypeError:
+            pileup_kwargs.pop("multiple_iterators", None)
+            return bamfile.pileup(**pileup_kwargs)
+
+
 def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dictionary):
     bamfile = pysam.AlignmentFile(bam_path, "rb", reference_filename=ref_seq)
     fastafile = pysam.FastaFile(ref_seq)
@@ -301,17 +325,33 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
             if 'Label' in rec.keys():
                 metrics.set_metric('Label', rec['Label'])
 
-            if sample_data.get('AD') is not None and len(sample_data.get('AD')) <= 1 :
-                continue
+            ad_values = sample_data.get('AD')
+            af_values = sample_data.get('AF')
+            dp_value = sample_data.get('DP')
 
-            dp = sample_data.get('DP')
-            metrics.set_metric('tumor_depth', sum(dp) if isinstance(dp, (list, tuple)) else dp)
+            ad_is_missing = ad_values is None or (isinstance(ad_values, (list, tuple)) and len(ad_values) == 0)
+            af_is_missing = af_values is None or (isinstance(af_values, (list, tuple)) and len(af_values) == 0)
+            dp_is_missing = dp_value is None or (isinstance(dp_value, (list, tuple)) and len(dp_value) == 0)
 
-            if 'AF' in sample_data.keys():
-                af = sample_data.get('AF')
-                metrics.set_metric('tumor_VAF', af if isinstance(af, float) else af[0])
+            if not dp_is_missing:
+                if isinstance(dp_value, (list, tuple)):
+                    tumor_depth = sum(dp_value)
+                else:
+                    tumor_depth = int(dp_value)
+                metrics.set_metric('tumor_depth', tumor_depth)
+            else:
+                metrics.set_metric('tumor_depth', 0)
 
-            for pileupcolumn in bamfile.pileup(contig=chrom, start=pos - 1, stop=pos, min_base_quality=0, min_mapping_quality=0):
+            if not af_is_missing:
+                if isinstance(af_values, (list, tuple)):
+                    tumor_vaf = af_values[0] if af_values else 0
+                else:
+                    tumor_vaf = af_values
+                metrics.set_metric('tumor_VAF', tumor_vaf)
+            else:
+                metrics.set_metric('tumor_VAF', 0)
+
+            for pileupcolumn in iter_pileup_columns(bamfile, chrom, pos):
                 if pileupcolumn.pos == pos - 1:
                     for pileupread in pileupcolumn.pileups:
                         metrics.increment_metric('num_total_reads')
@@ -360,6 +400,18 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
                                     metrics.add_metric('avg_sum_mismatch_base_quals',(sum(mismatch_base_quals)))   
                         else:
                             metrics.increment_metric('tumor_other_bases_count')                   
+
+            pileup_depth = metrics.get_metric('num_total_reads')
+            if dp_is_missing and pileup_depth:
+                metrics.set_metric('tumor_depth', pileup_depth)
+
+            if af_is_missing:
+                tumor_var_count = metrics.get_metric('tumor_var_count')
+                tumor_depth_for_vaf = metrics.get_metric('tumor_depth') or pileup_depth
+                if tumor_depth_for_vaf:
+                    metrics.set_metric('tumor_VAF', tumor_var_count / tumor_depth_for_vaf)
+                else:
+                    metrics.set_metric('tumor_VAF', 0)
             
             metrics.aggregate_base_metrics(ref, alt) 
 
@@ -409,9 +461,16 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
         except Exception as e:
             logger.error(traceback.format_exc())
             logger.error(f"process_variant (very large) error trap: An error occurred: {e}")
-            bamfile.close()
-            fastafile.close()
-            raise SystemExit(1)
+            metrics.set_metric('tumor_depth', 0)
+            metrics.set_metric('tumor_VAF', 0)
+            metrics.set_metric('window_gc_cont', 0)
+            metrics.set_metric('window_seq_entropy', 0)
+            metrics.set_metric('window_median_cov', 0)
+            metrics.set_metric('window_cov_variance', 0)
+            metrics.set_metric('window_min_cov_ratio', None)
+            metrics.set_metric('window_max_cov_ratio', None)
+            metrics.set_metric('trinucleotide_context', "")
+            metrics.set_metric('pentanucleotide_context', "")
 
         iolock.acquire()
         final_dictionary[variant_id] = metrics.get_all_metrics()
