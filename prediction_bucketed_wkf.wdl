@@ -27,12 +27,17 @@ version 1.0
 import "wdl/wdl_structs.wdl"
 import "wdl/prediction_wkf.wdl" as predictionWkf
 import "wdl/fifa.wdl" as fifaTasks
+import "wdl/tasks.wdl" as tasks
 
 workflow PredictionBucketedWkf {
     input {
+        File countHetsScript
+        File hetSnpsScript
+        File gnomADMaf
         Boolean local = true
         String bamFilenamePath
         Int bamFileSize
+        Int normalBamFileSize
         String bamDownloadUri
         String baiFilenamePath
         String baiDownloadUri
@@ -47,7 +52,7 @@ workflow PredictionBucketedWkf {
         File awsConfig
         File awsCredentials
         String endpointUrl
-        String sampleId
+        String pairId
         String tumorId
         String normalId
         String projectId
@@ -107,7 +112,7 @@ workflow PredictionBucketedWkf {
                 qos = qos,
                 partition = partition,
                 cpuPlatform = cpuPlatform,
-                diskSize = bamFileSize + 20
+                diskSize = normalBamFileSize + 20
         }
 
     call fifaTasks.Download as normalBaiDownload {
@@ -164,7 +169,7 @@ workflow PredictionBucketedWkf {
         Int num = i + 1
         String suffixes = "${num}"
     }
-    String prefix = "~{sampleId}.fifa."
+    String prefix = "~{pairId}.fifa."
     String additionalSuffix = ".vcf"
     scatter (index in range(length(suffixes))) {
         String suffix = suffixes[index]
@@ -187,7 +192,7 @@ workflow PredictionBucketedWkf {
                 tumor = tumorId,
                 normal = normalId,
                 rawVcf = splitVcf,
-                orderedVcfPath = "~{sampleId}.renamedColumns.vcf",
+                orderedVcfPath = "~{pairId}.renamedColumns.vcf",
                 memoryGb = 4,
                 diskSize = 10
         }
@@ -200,7 +205,7 @@ workflow PredictionBucketedWkf {
         call fifaTasks.MakeVariantBed {
             input:
                 vcf = splitVcf,
-                sampleId = sampleId,
+                sampleId = pairId,
                 referenceFa = referenceFa,
                 diskSize = 10
         }
@@ -210,7 +215,7 @@ workflow PredictionBucketedWkf {
                 gcpProject = gcpProject,
                 serviceAccountKey = serviceAccountKey,
                 features1000Bed = MakeVariantBed.features1000Bed,
-                sampleId = sampleId,
+                sampleId = pairId,
                 referenceFa = referenceFa,
                 diskSize = 30
         }
@@ -224,7 +229,7 @@ workflow PredictionBucketedWkf {
             call predictionWkf.PredictionWkf as rnaPredictionWkf {
                 input:
                     bram = tumorVariantBram,
-                    sampleId = sampleId,
+                    sampleId = pairId,
                     projectId = projectId,
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     optionalRnaFile = rnaFile,
@@ -240,7 +245,7 @@ workflow PredictionBucketedWkf {
             call predictionWkf.PredictionWkf {
                 input:
                     bram = tumorVariantBram,
-                    sampleId = sampleId,
+                    sampleId = pairId,
                     projectId = projectId,
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     models = models,
@@ -256,21 +261,21 @@ workflow PredictionBucketedWkf {
     call fifaTasks.ConcateTables {
         input:
             tables = extractedFeaturesRun,
-            outputTablePath =  "~{sampleId}.extracted_features.csv"
+            outputTablePath =  "~{pairId}.extracted_features.csv"
     }
     call fifaTasks.Gatk4MergeSortVcf {
         input:
             tempVcfs = fifaVcfRun,
             referenceFa = referenceFa,
-            sortedVcfPath = "~{sampleId}.fifa.vcf"
+            sortedVcfPath = "~{pairId}.fifa.vcf"
     }
     # merge tumor variant BAMs
     Int tumorVariantBramsSize = ceil(size(tumorVariantBrams, "GB"))
     call fifaTasks.MergeSortAlignments {
         input:
             inputs = tumorVariantBrams,
-            outputPath = "~{sampleId}.tumor.variant.bam",
-            outputIndexPath = "~{sampleId}.tumor.variant.bai",
+            outputPath = "~{pairId}.tumor.variant.bam",
+            outputIndexPath = "~{pairId}.tumor.variant.bai",
             threads = 4,
             diskSize = (3 * tumorVariantBramsSize),
             referenceFa = referenceFa
@@ -279,24 +284,70 @@ workflow PredictionBucketedWkf {
     call fifaTasks.MakeVariantBed as normalMakeVariantBed {
             input:
                 vcf = vcf.vcf,
-                sampleId = sampleId,
+                sampleId = normalId,
                 referenceFa = referenceFa,
                 diskSize = 10
         }
     call fifaTasks.MakeVariantCram as normalMakeVariantCram {
         input:
-            finalBram = bram,
+            finalBram = normalBram,
             gcpProject = gcpProject,
             serviceAccountKey = serviceAccountKey,
             features1000Bed = normalMakeVariantBed.features1000Bed,
-            sampleId = sampleId,
+            sampleId = normalId,
             referenceFa = referenceFa,
             diskSize = 30
     }
+    call tasks.FragCounter as normalFragCounter {
+        input:
+            bram = normalBram,
+            referenceFa = referenceFa,
+            sampleId = normalId,
+            diskSize = normalBamFileSize + 10
+    }
+    call tasks.FragCounter as tumorFragCounter {
+        input:
+            bram = bram,
+            referenceFa = referenceFa,
+            sampleId = tumorId,
+            diskSize = bamFileSize + 10
+    }
+
+    call tasks.CountHetsSnps as countHetsSnps {
+        input:
+            countHetsScript = countHetsScript,
+            hetSnpsScript = hetSnpsScript,
+            gnomADMaf = gnomADMaf,
+            tumorBram = bram,
+            normalBram = normalBram,
+            pairId = pairId,
+            diskSize = normalBamFileSize + bamFileSize + 10,
+            memoryGb = 16
+    }
+
+    call tasks.HapaSegLocal {
+        input:
+            tumorBram = bram,
+            normalBram = normalBram,
+            pairId = pairId,
+            hetSnpsCountsTsv = countHetsSnps.hetSnpsCountsTsv,
+            diskSize = normalBamFileSize + bamFileSize + 30,
+            memoryGb = 24,
+            threads = 8
+    }
     output {
+        Array[File] hapaSegLocalFiles = HapaSegLocal.hapaSegLocalFiles
         File extractedFeatures = ConcateTables.outputTable
         File fifaVcf = Gatk4MergeSortVcf.sortedVcf.vcf
         Bram tumorVariantCram = MergeSortAlignments.mergedBram
         Cram normalVariantCram = normalMakeVariantCram.variantCram
+        File normalRds = normalFragCounter.rds
+        File normalRawRds = normalFragCounter.rawRds
+        File normalCorrectedBw = normalFragCounter.correctedBw
+        File normalOneKbRds = normalFragCounter.oneKbRds
+        File tumorRds = tumorFragCounter.rds
+        File tumorRawRds = tumorFragCounter.rawRds
+        File tumorCorrectedBw = tumorFragCounter.correctedBw
+        File tumorOneKbRds = tumorFragCounter.oneKbRds
     }
 }
