@@ -139,15 +139,15 @@ task MakeVariantCram {
         Bram finalBram
         File features1000Bed
         String sampleId
-        String variantCramPath = "~{sampleId}.variantRegions.cram"
-        String variantCraiPath = "~{sampleId}.variantRegions.crai"
+        String variantCramPath = "~{sampleId}.variantRegions.bam"
+        String variantCraiPath = "~{sampleId}.variantRegions.bai"
         IndexedReference referenceFa
         Int slopSizeBp = 1000
         # resources
         String? gcpProject 
         File? serviceAccountKey
         Int diskSize
-        Int threads = 8
+        Int threads = 4
         Int runRequestThreads =  ceil(threads / 2.0)
         Int memoryGb = 16
     }
@@ -165,10 +165,11 @@ task MakeVariantCram {
         samtools view \
         --threads ~{threads} \
         -h \
-        --cram \
+        --bam \
         --reference ~{referenceFa.fasta} \
         -L ~{features1000Bed} \
-        ~{finalBram.bram} \
+        -X ~{finalBram.bram} \
+        ~{finalBram.bramIndex} \
         > ~{variantCramPath}
 
         samtools \
@@ -437,6 +438,122 @@ task Download {
     }
 }
 
+task DownloadIndexVcf {
+    input {
+        String filenamePath
+        String downloadUri
+        File index
+        File awsConfig
+        File awsCredentials
+        String endpointUrl
+        # resources
+        Int threads = 4
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 4
+        Int diskSize = 8
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+    }
+    command <<<
+        set -e -o pipefail
+        awsConfig="~{awsConfig}"
+        awsCredentials="~{awsCredentials}"
+        filenamePath="~{filenamePath}"
+        endpointUrl="~{endpointUrl}"
+        downloadUri="~{downloadUri}"
+        mkdir ~/.aws/
+        cp \
+        ${awsConfig} \
+        ${awsCredentials} \
+        ~/.aws/
+
+        aws s3 \
+        --endpoint-url ${endpointUrl} \
+        cp \
+        ${downloadUri} \
+        .
+    >>>
+
+    output {
+        IndexedVcf vcfCompressedIndexed = object {
+            vcf : "~{filenamePath}",
+            index : "~{index}"
+        }
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " HDD"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/awscli@sha256:67dc9052c4c286cafbfd9b93d6189e4f530a645a83f3f5fd96bd87563213127b"
+        runtime_minutes: "6000"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}
+
+task DownloadIndexBram {
+    input {
+        String filenamePath
+        String downloadUri
+        File bramIndex
+        File awsConfig
+        File awsCredentials
+        String endpointUrl
+        # resources
+        Int threads = 4
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 4
+        Int diskSize = 8
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+    }
+    command <<<
+        set -e -o pipefail
+        awsConfig="~{awsConfig}"
+        awsCredentials="~{awsCredentials}"
+        filenamePath="~{filenamePath}"
+        endpointUrl="~{endpointUrl}"
+        downloadUri="~{downloadUri}"
+        mkdir ~/.aws/
+        cp \
+        ${awsConfig} \
+        ${awsCredentials} \
+        ~/.aws/
+
+        aws s3 \
+        --endpoint-url ${endpointUrl} \
+        cp \
+        ${downloadUri} \
+        .
+    >>>
+
+    output {
+        Bram bram = object {
+            bram : "~{filenamePath}",
+            bramIndex : "~{bramIndex}"
+        }
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " HDD"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/awscli@sha256:67dc9052c4c286cafbfd9b93d6189e4f530a645a83f3f5fd96bd87563213127b"
+        runtime_minutes: "6000"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}
+
 task ConcateTables {
     input {
         String outputTablePath
@@ -566,7 +683,7 @@ task ExtractionMobsterFree {
             -s ${sampleId} \
             -c ${projectId} \
             -v ${new_vcf} \
-            -b $( basename ${bram} ) \
+            -b $( basename ${bram}) \
             -r $( basename ${referenceFa} ) \
             -o . \
             -n ${threads}

@@ -43,8 +43,7 @@ workflow PredictionWkf {
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
     }
-    Int diskSize = ceil(size(bram.bram, "GB")) * 3
-
+    Int diskSize = (ceil(size(bram.bram, "GB") + size(vcf.vcf, "GB")) * 3) + 20 
     if (mobsterFree) {
         call fifa.ExtractionMobsterFree {
             input:

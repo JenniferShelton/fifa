@@ -33,8 +33,8 @@ workflow PredictionBucketedWkf {
     input {
         File countHetsScript
         File hetSnpsScript
-        File gnomADMaf
-        Boolean local = true
+        Array[File] gnomADMaf
+        Boolean local = false
         String bamFilenamePath
         Int bamFileSize
         Int normalBamFileSize
@@ -59,7 +59,7 @@ workflow PredictionBucketedWkf {
         IndexedReference referenceFa
         File? optionalRnaFile
         Array[File] models
-        Boolean mobsterFree = false
+        Boolean mobsterFree = true
         # resources
         String? gcpProject 
         File? serviceAccountKey
@@ -68,12 +68,12 @@ workflow PredictionBucketedWkf {
         String cpuPlatform = "Intel Cascade Lake"
     }
     if (!local) {
-        Int cloudMaxSplits = 5
-        Int cloudMinSplits = 2
+        Int cloudMaxSplits = 30
+        Int cloudMinSplits = 28
     }
     if (local) {
-        Int hpcMaxSplits = 4
-        Int hpcMinSplits = 2
+        Int hpcMaxSplits = 30
+        Int hpcMinSplits = 28
     }
     # tumor
     call fifaTasks.Download as bamDownload {
@@ -175,11 +175,18 @@ workflow PredictionBucketedWkf {
         String suffix = suffixes[index]
         String splitVcfPaths = "~{prefix}.~{suffix}~{additionalSuffix}"
     }
+    Int passDiskSize = (ceil( size(vcf.vcf, "GB") )  * 2 ) + 10
+    call tasks.FilterForPassSnps {
+        input:
+            passVcfPath = "~{pairId}.pass.snps.vcf.gz",
+            unFilteredVcf = vcf,
+            diskSize = passDiskSize
+    }
     call fifaTasks.SplitVcf {
         input:
-            vcf = vcf.vcf,
+            vcf = FilterForPassSnps.passVcf.vcf,
             prefix = prefix,
-            diskSize = (ceil(size(vcf.vcf, "GB")) * 3) + 10,
+            diskSize = (ceil(size(FilterForPassSnps.passVcf.vcf, "GB")) * 3) + 10,
             maxRows = 1000,
             minSplits = select_first([cloudMinSplits, hpcMinSplits]),
             maxSplits = select_first([cloudMaxSplits, hpcMaxSplits]),
@@ -229,7 +236,7 @@ workflow PredictionBucketedWkf {
             call predictionWkf.PredictionWkf as rnaPredictionWkf {
                 input:
                     bram = tumorVariantBram,
-                    sampleId = pairId,
+                    sampleId = tumorId,
                     projectId = projectId,
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     optionalRnaFile = rnaFile,
@@ -245,8 +252,9 @@ workflow PredictionBucketedWkf {
             call predictionWkf.PredictionWkf {
                 input:
                     bram = tumorVariantBram,
-                    sampleId = pairId,
+                    sampleId = tumorId,
                     projectId = projectId,
+                    mobsterFree = mobsterFree,
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     models = models,
                     referenceFa = referenceFa,
@@ -313,24 +321,75 @@ workflow PredictionBucketedWkf {
             diskSize = bamFileSize + 10
     }
 
-    call tasks.CountHetsSnps as countHetsSnps {
-        input:
-            countHetsScript = countHetsScript,
-            hetSnpsScript = hetSnpsScript,
-            gnomADMaf = gnomADMaf,
-            tumorBram = bram,
-            normalBram = normalBram,
-            pairId = pairId,
-            diskSize = normalBamFileSize + bamFileSize + 10,
-            memoryGb = 16
+    scatter (gnomADMaf in gnomADMafs) {
+        call fifaTasks.MakeVariantCram as tumor2MakeVariantCram {
+            input:
+                finalBram = bram,
+                gcpProject = gcpProject,
+                serviceAccountKey = serviceAccountKey,
+                features1000Bed = gnomADMaf,
+                sampleId = tumorId,
+                referenceFa = referenceFa,
+                diskSize = 30
+        }
+        call fifaTasks.MakeVariantCram as normal2MakeVariantCram {
+            input:
+                finalBram = normalBram,
+                gcpProject = gcpProject,
+                serviceAccountKey = serviceAccountKey,
+                features1000Bed = gnomADMaf,
+                sampleId = normalId,
+                referenceFa = referenceFa,
+                diskSize = 30
+        }
+        Int tumor2VariantBramsSize = ceil(size(tumor2MakeVariantCram.variantCram.cram, "GB"))
+        Int normal2VariantBramsSize = ceil(size(normal2MakeVariantCram.variantCram.cram, "GB"))
+        
+        Bram tumor2VariantBram = object {
+            bram : tumor2MakeVariantCram.variantCram.cram,
+            bramIndex : tumor2MakeVariantCram.variantCram.cramIndex
+        }
+        Bram normal2VariantBram = object {
+            bram : normal2MakeVariantCram.variantCram.cram,
+            bramIndex : normal2MakeVariantCram.variantCram.cramIndex
+        }
+        call tasks.CountHetsSnps as countHetsSnps {
+            input:
+                countHetsScript = countHetsScript,
+                hetSnpsScript = hetSnpsScript,
+                gnomADMaf = gnomADMaf,
+                tumorBram = tumor2VariantBram,
+                normalBram = normal2VariantBram,
+                pairId = pairId,
+                diskSize = tumor2VariantBramsSize + normal2VariantBramsSize + 20,
+                memoryGb = 16
+        }
     }
+
+    call tasks.ConcateTables as ConcateTablesHs {
+        input :
+            outputTablePath = "hetSnpsCounts.tsv",
+            tables = countHetsSnps.hetSnpsCountsTsv,
+            diskSize = 20
+    }
+    # call tasks.CountHetsSnps as countHetsSnps {
+    #     input:
+    #         countHetsScript = countHetsScript,
+    #         hetSnpsScript = hetSnpsScript,
+    #         gnomADMaf = gnomADMaf,
+    #         tumorBram = bram,
+    #         normalBram = normalBram,
+    #         pairId = pairId,
+    #         diskSize = normalBamFileSize + bamFileSize + 10,
+    #         memoryGb = 16
+    # }
 
     call tasks.HapaSegLocal {
         input:
             tumorBram = bram,
             normalBram = normalBram,
             pairId = pairId,
-            hetSnpsCountsTsv = countHetsSnps.hetSnpsCountsTsv,
+            hetSnpsCountsTsv = ConcateTablesHs.outputTable,
             diskSize = normalBamFileSize + bamFileSize + 30,
             memoryGb = 24,
             threads = 8
@@ -341,13 +400,15 @@ workflow PredictionBucketedWkf {
         File fifaVcf = Gatk4MergeSortVcf.sortedVcf.vcf
         Bram tumorVariantCram = MergeSortAlignments.mergedBram
         Cram normalVariantCram = normalMakeVariantCram.variantCram
-        File normalRds = normalFragCounter.rds
-        File normalRawRds = normalFragCounter.rawRds
+        Array[File] normalRds = normalFragCounter.rds 
+        Array[File] tumorRds = tumorFragCounter.rds
+        # File normalRds = normalFragCounter.rds
+        # File normalRawRds = normalFragCounter.rawRds
         File normalCorrectedBw = normalFragCounter.correctedBw
-        File normalOneKbRds = normalFragCounter.oneKbRds
-        File tumorRds = tumorFragCounter.rds
-        File tumorRawRds = tumorFragCounter.rawRds
+        # File normalOneKbRds = normalFragCounter.oneKbRds
+        # File tumorRds = tumorFragCounter.rds
+        # File tumorRawRds = tumorFragCounter.rawRds
         File tumorCorrectedBw = tumorFragCounter.correctedBw
-        File tumorOneKbRds = tumorFragCounter.oneKbRds
+        # File tumorOneKbRds = tumorFragCounter.oneKbRds
     }
 }
