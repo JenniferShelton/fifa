@@ -71,7 +71,7 @@ task ReorderVcfColumns {
 
     runtime {
         mem: memoryGb + "G"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "gcr.io/nygc-public/somatic_dna_tools@sha256:f281e73ddf515f3a5db6e766ef12fb2331dafa2b27c88e426764dcd8b4a7e19b"
         runtime_minutes: "90"
@@ -124,7 +124,7 @@ task MakeVariantBed {
     }
     runtime {
         docker: "gcr.io/nygc-comp-s-fd4e/gcs_htslib_suite@sha256:47eba58683641905a58f31c05605c953dc1d888466e8d434a6ceff47b76df03e"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory: memoryGb + "GB"
         mem: memoryGb + "G"
         cpu : threads
@@ -186,7 +186,7 @@ task MakeVariantCram {
     }
     runtime {
         docker:  "us.gcr.io/nygc-comp-s-fd4e/samtoolsgcs@sha256:e44efa1effd03df21f14ce1d7ca586276bee053d64e3420897ae9d4fdf11d1a9"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory: memoryGb + "GB"
         mem: memoryGb + "G"
         cpu : threads
@@ -273,7 +273,7 @@ task MergeSortAlignments {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker: "us.gcr.io/nygc-comp-s-fd4e/samtoolsgcs@sha256:e44efa1effd03df21f14ce1d7ca586276bee053d64e3420897ae9d4fdf11d1a9"
         runtime_minutes: "6000"
@@ -335,7 +335,7 @@ task SplitVcf {
 
     runtime {
         mem: memoryGb + "G"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "gcr.io/nygc-comp-s-fd4e/gcs_htslib_suite@sha256:47eba58683641905a58f31c05605c953dc1d888466e8d434a6ceff47b76df03e"
         runtime_minutes: "1440"
@@ -373,7 +373,7 @@ task CompressIndexVcf {
     runtime {
         mem: memoryGb + "G"
         memory : memoryGb + "GB"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         docker: "gcr.io/nygc-comp-s-fd4e/gcs_htslib_suite@sha256:47eba58683641905a58f31c05605c953dc1d888466e8d434a6ceff47b76df03e"
         runtime_minutes: "1440"
     }
@@ -427,7 +427,7 @@ task Download {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/awscli@sha256:67dc9052c4c286cafbfd9b93d6189e4f530a645a83f3f5fd96bd87563213127b"
         runtime_minutes: "6000"
@@ -461,7 +461,7 @@ task ConcateTables {
     runtime {
         mem: memoryGb + "G"
         memory : memoryGb + "GB"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         docker: "gcr.io/nygc-public/somatic_dna_tools@sha256:f281e73ddf515f3a5db6e766ef12fb2331dafa2b27c88e426764dcd8b4a7e19b"
         runtime_minutes: "90"
     }
@@ -508,7 +508,7 @@ task Gatk4MergeSortVcf {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "gcr.io/nygc-public/broadinstitute/gatk4@sha256:b3bde7bc74ab00ddce342bd511a9797007aaf3d22b9cfd7b52f416c893c3774c"
         runtime_minutes: "500"
@@ -580,7 +580,7 @@ task ExtractionMobsterFree {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:1b0e1743b9454a0f8e2594d18269421e5d8a081e01f19bae5b3c4e611f256281"
         runtime_minutes: "6000"
@@ -654,7 +654,7 @@ task Extraction {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:1b0e1743b9454a0f8e2594d18269421e5d8a081e01f19bae5b3c4e611f256281"
         runtime_minutes: "6000"
@@ -704,7 +704,7 @@ task Prediction {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:1b0e1743b9454a0f8e2594d18269421e5d8a081e01f19bae5b3c4e611f256281"
         runtime_minutes: "300"
@@ -757,7 +757,7 @@ task PredictionWithRna {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:1b0e1743b9454a0f8e2594d18269421e5d8a081e01f19bae5b3c4e611f256281"
         runtime_minutes: "6000"
@@ -801,7 +801,7 @@ task Merge {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:1b0e1743b9454a0f8e2594d18269421e5d8a081e01f19bae5b3c4e611f256281"
         runtime_minutes: "300"
@@ -852,7 +852,7 @@ task ReTraining {
         mem: memoryGb + "G"
         cpus: runRequestThreads
         cpu : threads
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:1b0e1743b9454a0f8e2594d18269421e5d8a081e01f19bae5b3c4e611f256281"
         runtime_minutes: "300"
