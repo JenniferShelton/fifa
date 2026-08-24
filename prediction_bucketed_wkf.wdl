@@ -25,7 +25,8 @@ version 1.0
 # Workflow from https://www.biorxiv.org/content/10.64898/2026.03.10.710815v1
 # An explainable boosting machine model for identifying artifacts caused by formalin-fixed paraffin embedding
 import "wdl/wdl_structs.wdl"
-import "wdl/prediction_wkf.wdl" as predictionWkf
+# import "wdl/prediction_wkf.wdl" as predictionWkf
+import "wdl/prediction_mobsterless.wkf.wdl" as predictionWkf
 import "wdl/fifa.wdl" as fifaTasks
 import "wdl/tasks.wdl" as tasks
 
@@ -33,7 +34,7 @@ workflow PredictionBucketedWkf {
     input {
         File countHetsScript
         File hetSnpsScript
-        Array[File] gnomADMaf
+        Array[File] gnomADMafs
         Boolean local = false
         String bamFilenamePath
         Int bamFileSize
@@ -76,10 +77,11 @@ workflow PredictionBucketedWkf {
         Int hpcMinSplits = 28
     }
     # tumor
-    call fifaTasks.Download as bamDownload {
+    call fifaTasks.DownloadIndexBram as bamDownload {
             input:
                 filenamePath = bamFilenamePath,
                 downloadUri = bamDownloadUri,
+                bramIndex = baiDownload.download,
                 awsConfig = awsConfig,
                 awsCredentials = awsCredentials,
                 endpointUrl = endpointUrl,
@@ -102,10 +104,11 @@ workflow PredictionBucketedWkf {
                 diskSize = 4
         }
     # 
-    call fifaTasks.Download as normalBamDownload {
+    call fifaTasks.DownloadIndexBram  as normalBamDownload {
             input:
                 filenamePath = normalBamFilenamePath,
                 downloadUri = normalBamDownloadUri,
+                bramIndex = normalBaiDownload.download,
                 awsConfig = awsConfig,
                 awsCredentials = awsCredentials,
                 endpointUrl = endpointUrl,
@@ -127,10 +130,11 @@ workflow PredictionBucketedWkf {
                 cpuPlatform = cpuPlatform,
                 diskSize = 4
         }
-    call fifaTasks.Download as vcfDownload {
+    call fifaTasks.DownloadIndexVcf as vcfDownload {
             input:
                 filenamePath = vcfFilenamePath,
                 downloadUri = vcfDownloadUri,
+                index = vcfIndexDownload.download,
                 awsConfig = awsConfig,
                 awsCredentials = awsCredentials,
                 endpointUrl = endpointUrl,
@@ -150,19 +154,9 @@ workflow PredictionBucketedWkf {
                 partition = partition,
                 cpuPlatform = cpuPlatform
         }
-
-    IndexedVcf vcf = object {
-                vcf: vcfDownload.download,
-                index: vcfIndexDownload.download
-            }
-    Bram bram = object {
-                bram : bamDownload.download,
-                bramIndex : baiDownload.download
-            }
-    Bram normalBram = object {
-                bram : normalBamDownload.download,
-                bramIndex : normalBaiDownload.download
-            }
+    IndexedVcf vcf = vcfDownload.vcf
+    Bram bram = bamDownload.bram
+    Bram normalBram = normalBamDownload.bram
     # gather split VCF filenames to avoid glob that can fail on prem
     Int count = 100
     scatter (i in range(count)) {
@@ -264,19 +258,19 @@ workflow PredictionBucketedWkf {
             }
         }
         File extractedFeaturesRun = select_first([rnaPredictionWkf.extractedFeatures, PredictionWkf.extractedFeatures])
-        File fifaVcfRun = select_first([rnaPredictionWkf.fifaVcf, PredictionWkf.fifaVcf])
+        # File fifaVcfRun = select_first([rnaPredictionWkf.fifaVcf, PredictionWkf.fifaVcf])
     }
     call fifaTasks.ConcateTables {
         input:
             tables = extractedFeaturesRun,
             outputTablePath =  "~{pairId}.extracted_features.csv"
     }
-    call fifaTasks.Gatk4MergeSortVcf {
-        input:
-            tempVcfs = fifaVcfRun,
-            referenceFa = referenceFa,
-            sortedVcfPath = "~{pairId}.fifa.vcf"
-    }
+    # call fifaTasks.Gatk4MergeSortVcf {
+    #     input:
+    #         tempVcfs = fifaVcfRun,
+    #         referenceFa = referenceFa,
+    #         sortedVcfPath = "~{pairId}.fifa.vcf"
+    # }
     # merge tumor variant BAMs
     Int tumorVariantBramsSize = ceil(size(tumorVariantBrams, "GB"))
     call fifaTasks.MergeSortAlignments {
@@ -384,20 +378,20 @@ workflow PredictionBucketedWkf {
     #         memoryGb = 16
     # }
 
-    call tasks.HapaSegLocal {
-        input:
-            tumorBram = bram,
-            normalBram = normalBram,
-            pairId = pairId,
-            hetSnpsCountsTsv = ConcateTablesHs.outputTable,
-            diskSize = normalBamFileSize + bamFileSize + 30,
-            memoryGb = 24,
-            threads = 8
-    }
+    # call tasks.HapaSegLocal {
+    #     input:
+    #         tumorBram = bram,
+    #         normalBram = normalBram,
+    #         pairId = pairId,
+    #         hetSnpsCountsTsv = ConcateTablesHs.outputTable,
+    #         diskSize = normalBamFileSize + bamFileSize + 30,
+    #         memoryGb = 24,
+    #         threads = 8
+    # }
     output {
-        Array[File] hapaSegLocalFiles = HapaSegLocal.hapaSegLocalFiles
+        # Array[File] hapaSegLocalFiles = HapaSegLocal.hapaSegLocalFiles
         File extractedFeatures = ConcateTables.outputTable
-        File fifaVcf = Gatk4MergeSortVcf.sortedVcf.vcf
+        # File fifaVcf = Gatk4MergeSortVcf.sortedVcf.vcf
         Bram tumorVariantCram = MergeSortAlignments.mergedBram
         Cram normalVariantCram = normalMakeVariantCram.variantCram
         Array[File] normalRds = normalFragCounter.rds 

@@ -90,7 +90,7 @@ task FragCounter {
 
     runtime {
         mem: memoryGb + "G"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fragcounter@sha256:1f04990656cb7a6aecb763c0684caf5d885f66c7fc5f720014f3e68baf60806b"
         runtime_minutes: "90"
@@ -151,7 +151,7 @@ task CountHetsSnps {
 
     runtime {
         mem: memoryGb + "G"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "gcr.io/nygc-public/somatic_dna_tools@sha256:f281e73ddf515f3a5db6e766ef12fb2331dafa2b27c88e426764dcd8b4a7e19b"
         runtime_minutes: "90"
@@ -162,6 +162,7 @@ task CountHetsSnps {
 
 task HapaSegLocal {
     input {
+        File hapaseg_hg38_resources = "gs://nygc-comp-p-06c2-input/somatic/hapaseg/hapaseg_hg38_resources.tar.gz"
         Bram tumorBram
         Bram normalBram
         String pairId
@@ -177,6 +178,10 @@ task HapaSegLocal {
         hetSnpsCountsTsv=~{hetSnpsCountsTsv}
         tumorBram=~{tumorBram.bram}
         normalBram=~{normalBram.bram}
+
+        ## Unpack reference data
+        tar -xvzf \
+        ~{hapaseg_hg38_resources}
 
         hapaseg_local \
         --is-ffpe  \
@@ -203,7 +208,7 @@ task HapaSegLocal {
 
     runtime {
         mem: memoryGb + "G"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/hapaseg_local@sha256:29345c386af52082caf0621be73fbbac4b70a88435b8c64f8262b84d7716cd5f"
         runtime_minutes: "90"
@@ -244,7 +249,7 @@ task FilterForPassSnps {
 
     runtime {
         mem: memoryGb + "G"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "gcr.io/nygc-comp-s-fd4e/gcs_htslib_suite@sha256:47eba58683641905a58f31c05605c953dc1d888466e8d434a6ceff47b76df03e"
         runtime_minutes: "1440"
@@ -275,7 +280,7 @@ task ConcateTables {
     runtime {
         mem: memoryGb + "G"
         memory : memoryGb + "GB"
-        disks: "local-disk " + diskSize + " HDD"
+        disks: "local-disk " + diskSize + " LOCAL"
         docker: "gcr.io/nygc-public/somatic_dna_tools@sha256:f281e73ddf515f3a5db6e766ef12fb2331dafa2b27c88e426764dcd8b4a7e19b"
         runtime_minutes: "90"
     }
