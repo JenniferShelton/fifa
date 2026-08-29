@@ -114,7 +114,7 @@ RUN /opt/conda/envs/fifa-r/bin/Rscript -e "if (!requireNamespace('BiocManager', 
 RUN set -eux; \
     curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg; \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list; \
-    apt-get update && apt-get install -y google-cloud-sdk && rm -rf /var/lib/apt/lists/*
+    apt-get update && apt-get install -y google-cloud-cli && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements in an isolated virtual environment.
 ENV VIRTUAL_ENV=/opt/venv
