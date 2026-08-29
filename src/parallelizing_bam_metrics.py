@@ -27,6 +27,7 @@ import logging
 import warnings
 from metrics_dictionary import MetricsDictionary
 from metrics_dictionary import safe_median
+from metrics_dictionary import to_pyrimidine_context
 import unicodedata
 
 ################################################################### /MODULES ###
@@ -450,12 +451,13 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
             metrics.set_metric('window_median_mapq', fractions[4])
             metrics.set_metric('window_read_filter_frac', fractions[5])
 
-            ## Just changed to extract tri-/penta-nucleotide sequence (although this assumes that the variant is not
-            ## at the last position in the chromosome, is that ok ? )
-
-            sequence = fastafile.fetch(chrom, pos - 3, pos + 1)
-            metrics.set_metric('trinucleotide_context', sequence[1:3])
-            metrics.set_metric('pentanucleotide_context', sequence)
+            ## Extract flanking bases and format using universal convention:
+            ## 5' flank(s) [Ref>Alt] 3' flank(s), reverse complemented to the pyrimidine convention
+            sequence = fastafile.fetch(chrom, pos - 3, pos + 2)
+            trinucleotide_context = f'{sequence[1]}[{ref}>{alt}]{sequence[3]}'
+            pentanucleotide_context = f'{sequence[0:2]}[{ref}>{alt}]{sequence[3:5]}'
+            metrics.set_metric('trinucleotide_context', to_pyrimidine_context(trinucleotide_context))
+            metrics.set_metric('pentanucleotide_context', to_pyrimidine_context(pentanucleotide_context))
         
         except Exception as e:
             '''
