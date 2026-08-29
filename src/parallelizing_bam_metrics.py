@@ -35,23 +35,42 @@ import unicodedata
 
 global logger
 
-def trim_fasta_read(header: str, sequence: str, adapter: str) -> str:
+def pileup_read_to_fastq(pileup_read) -> str:
+    """
+    Converts a pysam PileupRead into a 4-line FASTQ string.
+    """
+    # Access the underlying AlignedSegment object
+    read = pileup_read.alignment
+    # Convert integer quality scores to Phred+33 ASCII characters
+    # pysam stores query_qualities as an array of integers (e.g., [30, 32, ...])
+    if read.query_qualities is not None:
+        qualities = "".join(chr(q + 33) for q in read.query_qualities)
+    else:
+        # Fallback if no quality scores exist
+        qualities = "~" * len(read.query_sequence)
+        
+    # 4. Format into a standard 4-line FASTQ string
+    fastq_string = f"@{read.query_name}\n{read.query_sequence}\n+\n{qualities}\n"
+    return fastq_string
+
+
+def trim_fasta_read(header: str, pileup_read: str, adapter: str) -> str:
     """Trim a 3' adapter from a single FASTA sequence using cutadapt."""
-    # Build the input fasta string
-    input_fasta = f">{header}\n{sequence}\n"
+    # Build the input fastq string
+    input_fastq = pileup_read_to_fastq(pileup_read)
     
     # Run cutadapt via stdin/stdout
     result = subprocess.run(
-        ["cutadapt", "-a", adapter, "-f", "fasta", "-"],
-        input=input_fasta,
+        ["cutadapt", "-a", adapter, "-"],
+        input=input_fastq,
         text=True,
         capture_output=True,
         check=True
     )
     
-    # Extract the trimmed sequence from the output fasta
+    # Extract the trimmed sequence from the output fastq
     lines = result.stdout.strip().split("\n")
-    trimmed_sequence = "".join(lines[1:]) if len(lines) > 1 else ""
+    trimmed_sequence = "".join(lines[1:2]) if len(lines) > 1 else ""
     return trimmed_sequence
 
 def is_read_filtered(read):
@@ -119,7 +138,7 @@ def process_cigar_tupples(read, reference_pos, adapter: str):
     clipped_length = sum([l for op, l in cigartuples if op in (4, 5)])
     if clipped_length > 0:
         trimmed_seq = trim_fasta_read(header='clipped_alignment', 
-                                        sequence=read.query_sequence, 
+                                        pileup_read=read, 
                                         adapter=adapter)
         trimmed_length = len(read.query_sequence) - len(trimmed_seq)
     for operation, length in cigartuples:

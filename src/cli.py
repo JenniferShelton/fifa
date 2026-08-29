@@ -11,7 +11,7 @@ from merge_models import merge_ebms
 from classify_with_scaling import predict
 from recover_annotations import predict_with_rna, load_models
 
-VERSION = 1.0
+VERSION = 2.0
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
