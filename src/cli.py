@@ -36,6 +36,8 @@ if __name__ == '__main__':
                             help='Path to reference file used for alignment of the sample\'s BAM file.')
     feature_parser.add_argument('-c', '--cohort', default='NA', 
                             help='Sample\'s Cohort')
+    feature_parser.add_argument('-a', '--adapter', default='AGATCGGAAGAGC', 
+                                help='Adapter sequence or file used in the BAM file alignment.')
     feature_parser.add_argument('-n', '--num_threads', default=2, type=int,
                                 help='Number of threads allocated')            
     feature_parser.add_argument('-o', '--output_path', default=os.getcwd(),
@@ -94,12 +96,17 @@ if __name__ == '__main__':
         logger.info('Extracting features from BAM/VCF files')
         if args.original_parallel:
             logger.info('Using original parallelization scheme. Less efficient than latest version (omit -p flag)')
-            regular_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
+            regular_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, 
+                                     sample=args.sample, cohort=args.cohort, 
             vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq)
         else:
-            parallel_process_bam_file(outpath=args.output_path, label=args.label, num_threads=args.num_threads, sample=args.sample, cohort=args.cohort, 
-            vcf_file=args.vcffile, bam_file=args.bamfile, ref_seq=args.refseq, skip_mobster=args.skip_mobster,
-            mobster_fit_rds=args.mobster_fit_rds)
+            parallel_process_bam_file(outpath=args.output_path, label=args.label, 
+                                      num_threads=args.num_threads, 
+                                      sample=args.sample, cohort=args.cohort, 
+                                      adapter=args.adapter,
+                                      vcf_file=args.vcffile, bam_file=args.bamfile, 
+                                      ref_seq=args.refseq, skip_mobster=args.skip_mobster,
+                                      mobster_fit_rds=args.mobster_fit_rds)
         # except Exception as e:
         #     logger.error(f"An error occurred: {e}")
 

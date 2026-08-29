@@ -36,6 +36,7 @@ dependencies:
 
   - bcftools
   - gatk4
+  - cutadapt
 
   - pip
   - pip:
