@@ -27,12 +27,32 @@ import logging
 import warnings
 from metrics_dictionary import MetricsDictionary
 from metrics_dictionary import safe_median
+from metrics_dictionary import to_pyrimidine_context
 import unicodedata
 
 ################################################################### /MODULES ###
 ################################################################################
 
 global logger
+
+def trim_fasta_read(header: str, sequence: str, adapter: str) -> str:
+    """Trim a 3' adapter from a single FASTA sequence using cutadapt."""
+    # Build the input fasta string
+    input_fasta = f">{header}\n{sequence}\n"
+    
+    # Run cutadapt via stdin/stdout
+    result = subprocess.run(
+        ["cutadapt", "-a", adapter, "-f", "fasta", "-"],
+        input=input_fasta,
+        text=True,
+        capture_output=True,
+        check=True
+    )
+    
+    # Extract the trimmed sequence from the output fasta
+    lines = result.stdout.strip().split("\n")
+    trimmed_sequence = "".join(lines[1:]) if len(lines) > 1 else ""
+    return trimmed_sequence
 
 def is_read_filtered(read):
     """
@@ -65,7 +85,7 @@ def is_read_filtered(read):
 
     return mutect_filtered
 
-def process_cigar_tupples(read, reference_pos):
+def process_cigar_tupples(read, reference_pos, adapter: str):
     """
     Process cigar string to get distance to effective 5' and 3' end
     and position of the variant in the read (both with and without
@@ -87,15 +107,22 @@ def process_cigar_tupples(read, reference_pos):
         Returns None if read is missing cigarstring or if the variant is a deletion
     """    
     if not(read.cigarstring):
-        return (None, None, None, None)
+        return (None, None, None, None, None)
     
     ref_pos_in_read = read.reference_start
     real_position_in_read = 0 # position of the variant in the read, including hard clipped bases
-    distance_to_5prime = distance_to_3prime = 0 
+    distance_to_5prime = distance_to_3prime = 0
+    trimmed_length = 0
     
     clipped_length = 0
-    
-    for operation, length in read.cigartuples:
+    cigartuples = read.cigartuples
+    clipped_length = sum([l for op, l in cigartuples if op in (4, 5)])
+    if clipped_length > 0:
+        trimmed_seq = trim_fasta_read(header='clipped_alignment', 
+                                        sequence=read.query_sequence, 
+                                        adapter=adapter)
+        trimmed_length = len(read.query_sequence) - len(trimmed_seq)
+    for operation, length in cigartuples:
         if operation == 0: # Match or mismatch
             if ref_pos_in_read <= reference_pos:  
                 if reference_pos < ref_pos_in_read + length:
@@ -118,21 +145,20 @@ def process_cigar_tupples(read, reference_pos):
         
         elif operation == 2:  # Deletion
             if ref_pos_in_read <= reference_pos < ref_pos_in_read + length:
-                return (None, None, None, None) 
+                return (None, None, None, None, None) 
             
             ref_pos_in_read += length
         
         elif operation == 4:  # Soft clipping
-            clipped_length += length
+            # clipped_length is already accounted for by the pre-loop sum above
             if ref_pos_in_read <= reference_pos: 
                 real_position_in_read += length
 
         elif operation == 5:  # Hard clipping
-            clipped_length += length
             if ref_pos_in_read <= reference_pos: 
                 real_position_in_read += length
     
-    return real_position_in_read, distance_to_5prime, distance_to_3prime, clipped_length
+    return real_position_in_read, distance_to_5prime, distance_to_3prime, clipped_length, trimmed_length
 
 def get_mismatch_and_insertion_positions(read):
     """
@@ -302,7 +328,8 @@ def iter_pileup_columns(bamfile, chrom, pos):
             return bamfile.pileup(**pileup_kwargs)
 
 
-def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dictionary):
+def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, 
+                    final_dictionary, adapter):
     bamfile = pysam.AlignmentFile(bam_path, "rb", reference_filename=ref_seq)
     fastafile = pysam.FastaFile(ref_seq)
 
@@ -360,8 +387,8 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
                         
                         ## This is probably inefficient... there must be ways to do this with pysam without
                         ## the need for extra methods 
-                        read_index, distance_5prime, distance_3prime, clipped_length = \
-                            process_cigar_tupples(read, pos)
+                        read_index, distance_5prime, distance_3prime, clipped_length, trimmed_length = \
+                            process_cigar_tupples(read, pos, adapter)
 
                         if query_index is None \
                                 or query_index < 0 \
@@ -378,16 +405,18 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
                             metrics.increment_metric('tumor_reads_filtered')
 
                         if is_ref or is_var: 
+                            read_length = read.infer_read_length()
                             prefix='tumor_ref' if is_ref else 'tumor_var'
                             metrics.increment_metric('tumor_ref_count' if is_ref else 'tumor_var_count')
                             metrics.increment_metric(f'{prefix}_num_minus_strand' if read.is_reverse else f'{prefix}_num_plus_strand')
                             
                             metrics.add_metric(f'{prefix}_base_qualities', read.query_qualities[query_index])
-                            metrics.add_metric(f'{prefix}_read_frag_length', read.infer_read_length())
-                            metrics.add_metric(f'{prefix}_avg_pos_as_fraction', (read_index / (read.infer_read_length() / 2)))
+                            metrics.add_metric(f'{prefix}_read_frag_length', read_length)
+                            metrics.add_metric(f'{prefix}_avg_pos_as_fraction', (read_index / (read_length / 2)))
                             metrics.add_metric(f'{prefix}_distances_to_5p_end', distance_5prime)
                             metrics.add_metric(f'{prefix}_distances_to_3p_end', distance_3prime)
                             metrics.add_metric(f'{prefix}_clipped_length', clipped_length)
+                            metrics.add_metric(f'{prefix}_trimmed_length', trimmed_length)
 
                             if read.is_paired:
                                 ## this is because we used to track the mapq of unpaired reads seperatly 
@@ -395,7 +424,7 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
 
                             if read.has_tag('MD'):
                                 num_mismatches, mismatch_base_quals = get_mismatch_and_insertion_positions(read)
-                                metrics.add_metric('avg_num_mismatches', num_mismatches / read.infer_read_length())
+                                metrics.add_metric('avg_num_mismatches', num_mismatches / read_length)
                                 if mismatch_base_quals:
                                     metrics.add_metric('avg_sum_mismatch_base_quals',(sum(mismatch_base_quals)))   
                         else:
@@ -450,12 +479,13 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, final_dict
             metrics.set_metric('window_median_mapq', fractions[4])
             metrics.set_metric('window_read_filter_frac', fractions[5])
 
-            ## Just changed to extract tri-/penta-nucleotide sequence (although this assumes that the variant is not
-            ## at the last position in the chromosome, is that ok ? )
-
-            sequence = fastafile.fetch(chrom, pos - 3, pos + 1)
-            metrics.set_metric('trinucleotide_context', sequence[1:3])
-            metrics.set_metric('pentanucleotide_context', sequence)
+            ## Extract flanking bases and format using universal convention:
+            ## 5' flank(s) [Ref>Alt] 3' flank(s), reverse complemented to the pyrimidine convention
+            sequence = fastafile.fetch(chrom, pos - 3, pos + 2)
+            trinucleotide_context = f'{sequence[1]}[{ref}>{alt}]{sequence[3]}'
+            pentanucleotide_context = f'{sequence[0:2]}[{ref}>{alt}]{sequence[3:5]}'
+            metrics.set_metric('trinucleotide_context', to_pyrimidine_context(trinucleotide_context))
+            metrics.set_metric('pentanucleotide_context', to_pyrimidine_context(pentanucleotide_context))
         
         except Exception as e:
             '''
@@ -582,13 +612,17 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores, mobster_
             if REF not in ['A', 'C', 'T', 'G'] or ALT not in ['A', 'C', 'T', 'G']:
                 continue
             variant_id = '{0}:{1}_{2}>{3}'.format(chrom, pos, REF, ALT)
-            mobster_scores[variant_id] = {'Tail': Tail}
+            if variant_id in mobster_scores:
+                logger.warning(f"Duplicate MOBSTER Tail score for {variant_id}; overwriting previous value")
+            mobster_scores[variant_id] = {'Tail': float(Tail)}
     mfile.close()
     if generated_fitfile and os.path.exists(fitfile):
         os.remove(fitfile)
     os.remove(outfile)
 
-def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=False, mobster_fit_rds=None):
+def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, 
+                         num_threads, output_file, adapter, 
+                         skip_mobster=False, mobster_fit_rds=None):
     is_compressed = vcf_path.endswith('.gz')
     has_index = os.path.exists(vcf_path + '.csi') or os.path.exists(vcf_path + '.tbi')
     if not is_compressed:
@@ -610,7 +644,7 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
         mobster_scores = manager.dict() if not skip_mobster else None
         all_features = manager.dict()
 
-        pool = [Process(target=process_variant, args=(queue, sample, cohort, bam_path, ref_seq, iolock, all_features)) for i in range(int(num_threads))]
+        pool = [Process(target=process_variant, args=(queue, sample, cohort, bam_path, ref_seq, iolock, all_features, adapter)) for i in range(int(num_threads))]
         if not skip_mobster:
             mobster_process = Process(target=get_mobster_tail_scores, args=(sample, vcf_path, output_file, mobster_scores, mobster_fit_rds), name="mobster_tail_scores")
             pool.insert(0, mobster_process)
@@ -681,7 +715,7 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
             result = {variant: all_features.get(variant, {}) for variant in all_features.keys()}
         else:
             ## Takes care of cases when MOBSTER doesn't run succesfully
-            result = {variant: {**all_features.get(variant, {}),**(mobster_scores.get(variant, {'Tail': 1}))}
+            result = {variant: {**all_features.get(variant, {}),**(mobster_scores.get(variant, {'Tail': 1.0}))}
                 for variant in all_features.keys()}
 
         num_vars = len(all_features)
@@ -703,11 +737,16 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num
 #################################################################################
 ### PROCESS INPUT FILES #########################################################
     
-def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, label, num_threads, skip_mobster=False, mobster_fit_rds=None): 
+def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, 
+                   label, num_threads, adapter="AGATCGGAAGAGC",
+                   skip_mobster=False, mobster_fit_rds=None): 
     # try:
     if os.path.isfile(vcf_path) and os.path.isfile(bam_path) and os.path.isfile(ref_seq):
         logger.info(f'Processing BAM file for sample: {sample}')
-        extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, num_threads, output_file, skip_mobster=skip_mobster, mobster_fit_rds=mobster_fit_rds)
+        extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, 
+                             label, num_threads, output_file, 
+                             adapter=adapter, 
+                             skip_mobster=skip_mobster, mobster_fit_rds=mobster_fit_rds)
             
     else:
         logger.error("There is an issue with one of your input files.")
@@ -723,7 +762,8 @@ def process_sample(sample, cohort, vcf_path, bam_path, ref_seq, output_file, lab
     #     traceback.print_exc()
 
 def process_bam_file(outpath, label, num_threads, sample, vcf_file, 
-bam_file, ref_seq, cohort=None, skip_mobster=False, mobster_fit_rds=None):
+                    bam_file, ref_seq, cohort=None, adapter="AGATCGGAAGAGC", 
+                    skip_mobster=False, mobster_fit_rds=None):
     global logger
     logger = logging.getLogger(__name__)
     
@@ -743,7 +783,10 @@ bam_file, ref_seq, cohort=None, skip_mobster=False, mobster_fit_rds=None):
             output_file=os.path.join(outpath, f"{sample}_extracted_features.csv")
     except Exception as e:
         logger.error(f"process_bam_file error trap:An error occurred: {e}")
-    process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, label, num_threads, skip_mobster=skip_mobster, mobster_fit_rds=mobster_fit_rds)
+    process_sample(sample, cohort, vcf_file, bam_file, ref_seq, output_file, 
+                   label, num_threads,
+                   adapter=adapter,
+                   skip_mobster=skip_mobster, mobster_fit_rds=mobster_fit_rds)
     # except Exception as e:
     #     logger.error(f"process_bam_file error trap:An error occurred: {e}")
 

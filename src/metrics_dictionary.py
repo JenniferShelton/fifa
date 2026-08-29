@@ -28,6 +28,28 @@ def safe_median(values):
         return median(filtered_values) if filtered_values is not None else None
     return 0
 
+_COMPLEMENT = str.maketrans('ACGT', 'TGCA')
+
+def reverse_complement(seq):
+    """
+    Reverse complement a DNA sequence string
+    """
+    return seq.translate(_COMPLEMENT)[::-1]
+
+def to_pyrimidine_context(context):
+    """
+    Apply the pyrimidine convention (as used in mutational signature analysis) to a
+    context string formatted as '<5' flank>[<Ref>><Alt>]<3' flank>'. If Ref is a
+    purine (A/G), the context is reverse complemented so Ref is always C or T.
+    """
+    left, rest = context.split('[')
+    change, right = rest.split(']')
+    ref, alt = change.split('>')
+    if ref in ('A', 'G'):
+        left, right = reverse_complement(right), reverse_complement(left)
+        ref, alt = reverse_complement(ref), reverse_complement(alt)
+    return f'{left}[{ref}>{alt}]{right}'
+
 class MetricsDictionary:
     """
     Class to hold the Base and Window Metrics dictionary

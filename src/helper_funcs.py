@@ -8,6 +8,7 @@ from json import dump
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 import sys
 import glob
+from metrics_dictionary import to_pyrimidine_context
 
 ## A random assortment of helper functions
 ## So that I'm not repeating code
@@ -30,8 +31,8 @@ def convert_hot_encodings(variants):
             variants[col] = variants[col].apply(lambda x: one_hot_to_base.get(str(x), x))
 
         variants = variants[~variants[categorical_columns].apply(lambda x: x.str.contains('N')).any(axis=1)]
-        variants['trinucleotide_context'] = variants['left_one_base'] + '[' + variants['hot_encoded_ref_base'] + '>' + variants['hot_encoded_var_base'] + ']' + variants['right_one_base']
-        variants['pentanucleotide_context'] = variants['left_two_base'] + variants['left_one_base'] + '[' + variants['hot_encoded_ref_base'] + '>' + variants['hot_encoded_var_base'] + ']' + variants['right_one_base'] + variants['right_two_base']
+        variants['trinucleotide_context'] = (variants['left_one_base'] + '[' + variants['hot_encoded_ref_base'] + '>' + variants['hot_encoded_var_base'] + ']' + variants['right_one_base']).apply(to_pyrimidine_context)
+        variants['pentanucleotide_context'] = (variants['left_two_base'] + variants['left_one_base'] + '[' + variants['hot_encoded_ref_base'] + '>' + variants['hot_encoded_var_base'] + ']' + variants['right_one_base'] + variants['right_two_base']).apply(to_pyrimidine_context)
 
         variants = variants.drop(categorical_columns, axis=1)
 
