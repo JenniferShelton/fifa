@@ -9,6 +9,7 @@ version 1.0
 # cannot be responsible for its use, misuse, or functionality.
 #
 #    Nico Robine (nrobine@nygenome.org)
+#    Will Liao (wliao@nygenome.org)
 #    Valentina Grether
 #    Zoe R. Goldstein (zgoldstein@nygenome.org)
 #    Jennifer M Shelton (jshelton@nygenome.org)
