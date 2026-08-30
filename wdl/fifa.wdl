@@ -699,7 +699,7 @@ task MobsterFit {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:36c55843592409a3f8fa2db1cf66eca88cd840b3c1cb87ae07abae321268a6c4"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:c48512a22d04097750e29572e77101f48a5435a2e5a944f8f01a8bb2da1797e3"
         runtime_minutes: "300"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -775,7 +775,7 @@ task ExtractionWithMobsterFit {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:36c55843592409a3f8fa2db1cf66eca88cd840b3c1cb87ae07abae321268a6c4"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:c48512a22d04097750e29572e77101f48a5435a2e5a944f8f01a8bb2da1797e3"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
