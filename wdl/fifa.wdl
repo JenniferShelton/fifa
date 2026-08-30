@@ -9,6 +9,7 @@ version 1.0
 # cannot be responsible for its use, misuse, or functionality.
 #
 #    Nico Robine (nrobine@nygenome.org)
+#    Will Liao (wliao@nygenome.org)
 #    Valentina Grether
 #    Zoe R. Goldstein (zgoldstein@nygenome.org)
 #    Jennifer M Shelton (jshelton@nygenome.org)
@@ -657,6 +658,124 @@ task Extraction {
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:c48512a22d04097750e29572e77101f48a5435a2e5a944f8f01a8bb2da1797e3"
+        runtime_minutes: "6000"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}
+
+task MobsterFit {
+    input {
+        String sampleId
+        File vcf
+        String mobsterFitRdsPath = "~{sampleId}.mobster_fit.rds"
+        # resources
+        Int threads = 1
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 8
+        Int diskSize = 10
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+    }
+    command <<<
+        set -e -o pipefail
+
+        Rscript \
+        /opt/fifa/src/run_mobster_fit.R \
+        ~{sampleId} \
+        ~{vcf} \
+        ~{mobsterFitRdsPath}
+    >>>
+
+    output {
+        File mobsterFitRds = mobsterFitRdsPath
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " LOCAL"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:36c55843592409a3f8fa2db1cf66eca88cd840b3c1cb87ae07abae321268a6c4"
+        runtime_minutes: "300"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}
+
+task ExtractionWithMobsterFit {
+    input {
+        Bram bram
+        String sampleId
+        String projectId
+        IndexedVcf vcf
+        IndexedReference referenceFa
+        File mobsterFitRds
+        String extractedFeaturesPath = "~{sampleId}_extracted_features.csv"
+        # resources
+        Int threads = 1
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 48
+        Int diskSize
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+
+    }
+    command <<<
+        set -e -o pipefail
+        sampleId="~{sampleId}"
+        bram="~{bram.bram}"
+        projectId="~{projectId}"
+        vcf="~{vcf.vcf}"
+        threads="~{threads}"
+        referenceFa="~{referenceFa.fasta}"
+        mobsterFitRds="~{mobsterFitRds}"
+
+        export TMPDIR=/tmp/
+        mkdir -p ${TMPDIR}
+
+        extension=$( basename ${vcf} | sed 's|.*\.vcf|.vcf|' )
+        vcf_basename=$( basename ${vcf} | sed 's|\.vcf.*||' )
+        new_vcf=${vcf_basename:0:25}${extension}
+        ln -s ${vcf} ${new_vcf}
+
+        vcf_index_extension=$( basename ~{vcf.index} | sed 's|.*\.vcf|.vcf|' )
+        new_vcf_index=${vcf_basename:0:25}${vcf_index_extension}
+        ln -s ~{vcf.index} ${new_vcf_index}
+
+        ln -s ${bram} .
+        ln -s ~{bram.bramIndex} .
+        ln -s ${referenceFa}* .
+
+        # Extract features for the EBM model, reusing a precomputed MOBSTER fit instead of refitting per shard.
+        python3 /opt/fifa/src/cli.py \
+            extract \
+            -s ${sampleId} \
+            -c ${projectId} \
+            -v ${new_vcf} \
+            -b $( basename ${bram} ) \
+            -r $( basename ${referenceFa} ) \
+            -o . \
+            -n ${threads} \
+            --mobster-fit-rds ${mobsterFitRds}
+    >>>
+
+    output {
+        File extractedFeatures = extractedFeaturesPath
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " LOCAL"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:36c55843592409a3f8fa2db1cf66eca88cd840b3c1cb87ae07abae321268a6c4"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"

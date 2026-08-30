@@ -25,49 +25,69 @@ version 1.0
 
 # Workflow from https://www.biorxiv.org/content/10.64898/2026.03.10.710815v1
 # An explainable boosting machine model for identifying artifacts caused by formalin-fixed paraffin embedding
-import "wdl_structs.wdl"
-import "fifa.wdl" as fifa
+import "wdl/wdl_structs.wdl"
+import "wdl/fifa.wdl" as fifaTasks
 
 
-workflow PredictionWkf {
+workflow ExtractasticWkf {
     input {
         Bram bram
         String sampleId
         String projectId
         IndexedVcf vcf
         IndexedReference referenceFa
-        File? optionalRnaFile
-        Array[File] models
-        Boolean mobsterFree = false
         # resources
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
     }
+
+    call fifaTasks.MobsterFit {
+        input:
+            sampleId = sampleId,
+            vcf = vcf.vcf,
+            qos = qos,
+            partition = partition,
+            cpuPlatform = cpuPlatform
+    }
+
+    # gather split VCF filenames to avoid glob that can fail on prem
+    Int count = 20
+    scatter (i in range(count)) {
+        Int num = i + 1
+        String suffixes = "${num}"
+    }
+    String prefix = "~{sampleId}.extractastic."
+    String additionalSuffix = ".vcf"
+    scatter (index in range(length(suffixes))) {
+        String suffix = suffixes[index]
+        String splitVcfPaths = "~{prefix}.~{suffix}~{additionalSuffix}"
+    }
+    call fifaTasks.SplitVcf {
+        input:
+            vcf = vcf.vcf,
+            prefix = prefix,
+            diskSize = (ceil(size(vcf.vcf, "GB")) * 3) + 10,
+            maxSplits = 20,
+            splitVcfPaths = splitVcfPaths
+    }
+    Array[File] splitVcfs = select_all(SplitVcf.splitVcfs)
+
     Int diskSize = ceil(size(bram.bram, "GB")) * 3
 
-    if (mobsterFree) {
-        call fifa.ExtractionMobsterFree {
+    scatter (splitVcf in splitVcfs) {
+        call fifaTasks.CompressIndexVcf {
             input:
-                bram = bram,
-                sampleId = sampleId,
-                projectId = projectId,
-                vcf = vcf,
-                referenceFa = referenceFa,
-                diskSize = diskSize,
-                qos = qos,
-                partition = partition,
-                cpuPlatform = cpuPlatform
+                vcf = splitVcf
         }
-    }
-    if (!mobsterFree) {
-        call fifa.Extraction {
+        call fifaTasks.ExtractionWithMobsterFit {
             input:
                 bram = bram,
                 sampleId = sampleId,
                 projectId = projectId,
-                vcf = vcf,
+                vcf = CompressIndexVcf.vcfCompressedIndexed,
                 referenceFa = referenceFa,
+                mobsterFitRds = MobsterFit.mobsterFitRds,
                 diskSize = diskSize,
                 qos = qos,
                 partition = partition,
@@ -75,31 +95,14 @@ workflow PredictionWkf {
         }
     }
 
-    File extractedFeaturesRun = select_first([Extraction.extractedFeatures, ExtractionMobsterFree.extractedFeatures]) 
-
-    if (defined(optionalRnaFile)) {
-        call fifa.PredictionWithRna {
-            input:
-                sampleId = sampleId,
-                vcf = vcf,
-                extractedFeatures = extractedFeaturesRun,
-                models = models,
-                optionalRnaFile = optionalRnaFile
-        }
+    call fifaTasks.ConcateTables {
+        input:
+            tables = ExtractionWithMobsterFit.extractedFeatures,
+            outputTablePath = "~{sampleId}_extracted_features.csv"
     }
 
-    if (!defined(optionalRnaFile)) {
-        call fifa.Prediction {
-            input:
-                sampleId = sampleId,
-                vcf = vcf,
-                extractedFeatures = extractedFeaturesRun,
-                models = models
-        }
-    }
-    File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])
     output {
-        File extractedFeatures = extractedFeaturesRun
-        File fifaVcf = fifaVcfRun
+        File extractedFeatures = ConcateTables.outputTable
+        File mobsterFitRds = MobsterFit.mobsterFitRds
     }
 }
