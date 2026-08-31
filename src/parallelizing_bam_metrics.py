@@ -21,7 +21,9 @@ from Bio.SeqUtils import gc_fraction # type: ignore
 from concurrent.futures import ProcessPoolExecutor
 import traceback
 import subprocess
-from multiprocessing import Queue, Lock, Process, Pool, Manager
+from multiprocessing import Queue, Process, Pool
+import shutil
+import tempfile
 import time
 import logging
 import warnings
@@ -345,10 +347,11 @@ def iter_pileup_columns(bamfile, chrom, pos):
             return bamfile.pileup(**pileup_kwargs)
 
 
-def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock, 
-                    final_dictionary, adapter):
+def process_variant(queue, sample, cohort, bam_path, ref_seq, adapter,
+                    worker_output_path):
     bamfile = pysam.AlignmentFile(bam_path, "rb", reference_filename=ref_seq)
     fastafile = pysam.FastaFile(ref_seq)
+    feature_rows = []
 
     while True:
         rec, sample_data, vcf_index = queue.get()
@@ -522,9 +525,9 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, iolock,
             # metrics.set_metric('pentanucleotide_context', "")
             raise SystemExit(1)
 
-        iolock.acquire()
-        final_dictionary[variant_id] = metrics.get_all_metrics()
-        iolock.release()
+        feature_rows.append({'Variant': variant_id, **metrics.get_all_metrics()})
+
+    pd.DataFrame(feature_rows).to_csv(worker_output_path, index=False)
 
 def read_vcf(sample, label, vcf_path, queue, num_threads, processes=None):
     def fail_if_worker_failed():
@@ -573,7 +576,7 @@ def read_vcf(sample, label, vcf_path, queue, num_threads, processes=None):
 
     vcffile.close()
 
-def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores, mobster_fit_rds=None):
+def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_fit_rds=None):
     outfile = os.path.join(os.path.dirname(out_path), f'{sample}_mobster.csv')
     fitfile = os.path.join(os.path.dirname(out_path), f'{sample}_mobster_fit.rds')
     generated_fitfile = False
@@ -593,8 +596,8 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores, mobster_
             stderr=subprocess.PIPE
             )
 
-        logger.info(fit_process.stdout.decode('unicode_escape'))
-        logger.error(fit_process.stderr.decode('unicode_escape'))
+        logger.info(fit_process.stdout.decode('utf-8', errors='replace'))
+        logger.error(fit_process.stderr.decode('utf-8', errors='replace'))
         if fit_process.returncode != 0:
             logger.error(
                 "MOBSTER fit subprocess failed with exit code %s for sample %s",
@@ -610,8 +613,8 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores, mobster_
         stderr=subprocess.PIPE
         )
 
-    logger.info(sample_data_process.stdout.decode('unicode_escape'))
-    logger.error(sample_data_process.stderr.decode('unicode_escape'))
+    logger.info(sample_data_process.stdout.decode('utf-8', errors='replace'))
+    logger.error(sample_data_process.stderr.decode('utf-8', errors='replace'))
     if sample_data_process.returncode != 0:
         logger.error(
             "MOBSTER sample-data subprocess failed with exit code %s for sample %s",
@@ -619,23 +622,9 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_scores, mobster_
             sample,
         )
         raise SystemExit(sample_data_process.returncode)
-       
-    with open(outfile, newline='') as mfile:
-        logger.info(f"Finished MOBSTER calculations for {sample}")
-        reader = csv.reader(mfile, delimiter=',')
-        header = next(reader)
-        for row in reader: 
-            sample, chrom, pos, REF, ALT, Tail = row
-            if REF not in ['A', 'C', 'T', 'G'] or ALT not in ['A', 'C', 'T', 'G']:
-                continue
-            variant_id = '{0}:{1}_{2}>{3}'.format(chrom, pos, REF, ALT)
-            if variant_id in mobster_scores:
-                logger.warning(f"Duplicate MOBSTER Tail score for {variant_id}; overwriting previous value")
-            mobster_scores[variant_id] = {'Tail': float(Tail)}
-    mfile.close()
+    logger.info(f"Finished MOBSTER calculations for {sample}")
     if generated_fitfile and os.path.exists(fitfile):
         os.remove(fitfile)
-    os.remove(outfile)
 
 def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, 
                          num_threads, output_file, adapter, 
@@ -651,19 +640,34 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label,
 
     start = time.time()
     
-    queue = Queue(maxsize=500) 
-
-    iolock = Lock()
-    to_df = []
+    queue = Queue(maxsize=500)
+    temporary_directory = tempfile.mkdtemp(
+        prefix='fifa_features_',
+        dir=os.path.dirname(os.path.abspath(output_file)),
+    )
+    worker_output_paths = [
+        os.path.join(temporary_directory, f'features_{worker_index}.csv')
+        for worker_index in range(int(num_threads))
+    ]
+    mobster_output_file = os.path.join(
+        os.path.dirname(output_file), f'{sample}_mobster.csv'
+    )
     num_vars = 0
 
-    with Manager() as manager:
-        mobster_scores = manager.dict() if not skip_mobster else None
-        all_features = manager.dict()
-
-        pool = [Process(target=process_variant, args=(queue, sample, cohort, bam_path, ref_seq, iolock, all_features, adapter)) for i in range(int(num_threads))]
+    try:
+        pool = [
+            Process(
+                target=process_variant,
+                args=(queue, sample, cohort, bam_path, ref_seq, adapter, worker_output_path),
+            )
+            for worker_output_path in worker_output_paths
+        ]
         if not skip_mobster:
-            mobster_process = Process(target=get_mobster_tail_scores, args=(sample, vcf_path, output_file, mobster_scores, mobster_fit_rds), name="mobster_tail_scores")
+            mobster_process = Process(
+                target=get_mobster_tail_scores,
+                args=(sample, vcf_path, output_file, mobster_fit_rds),
+                name="mobster_tail_scores",
+            )
             pool.insert(0, mobster_process)
         for P in pool:
             P.start()
@@ -728,17 +732,50 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label,
             logger.error("Feature extraction exiting with worker failure code %s", failed_exit_code)
             raise SystemExit(failed_exit_code)
         
-        if skip_mobster:
-            result = {variant: all_features.get(variant, {}) for variant in all_features.keys()}
-        else:
-            ## Takes care of cases when MOBSTER doesn't run succesfully
-            result = {variant: {**all_features.get(variant, {}),**(mobster_scores.get(variant, {'Tail': 1.0}))}
-                for variant in all_features.keys()}
+        feature_frames = [
+            pd.read_csv(worker_output_path)
+            for worker_output_path in worker_output_paths
+            if os.path.exists(worker_output_path) and os.path.getsize(worker_output_path) > 0
+        ]
+        extracted_features = pd.concat(feature_frames, ignore_index=True)
+        num_vars = len(extracted_features)
 
-        num_vars = len(all_features)
-        to_df = [{'Variant': variant, **metric} for variant, metric in result.items()]
-    
-    pd.DataFrame(to_df).sort_values("vcf_index").drop("vcf_index", axis=1).to_csv(output_file, index=False)
+        if not skip_mobster:
+            mobster_scores = {}
+            with open(mobster_output_file, newline='') as mobster_file:
+                reader = csv.DictReader(mobster_file)
+                for row in reader:
+                    ref = row['REF']
+                    alt = row['ALT']
+                    if ref not in ['A', 'C', 'T', 'G'] or alt not in ['A', 'C', 'T', 'G']:
+                        continue
+                    variant_id = '{0}:{1}_{2}>{3}'.format(
+                        row['chrom'], row['pos'], ref, alt
+                    )
+                    if variant_id in mobster_scores:
+                        logger.warning(
+                            "Duplicate MOBSTER Tail score for %s; overwriting previous value",
+                            variant_id,
+                        )
+                    mobster_scores[variant_id] = float(row['Tail'])
+            extracted_features['Tail'] = (
+                extracted_features['Variant'].map(mobster_scores).fillna(1.0)
+            )
+            os.remove(mobster_output_file)
+
+        feature_columns = sorted(
+            column
+            for column in extracted_features.columns
+            if column not in {'Variant', 'Tail', 'vcf_index'}
+        )
+        output_columns = ['Variant', *feature_columns]
+        if 'Tail' in extracted_features.columns:
+            output_columns.append('Tail')
+        extracted_features.sort_values("vcf_index")[output_columns].to_csv(
+            output_file, index=False
+        )
+    finally:
+        shutil.rmtree(temporary_directory, ignore_errors=True)
 
     end = time.time() - start
     logger.info(f"Finished all metrics for {num_vars} vars in {sample} in {end}")
