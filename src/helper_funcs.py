@@ -100,7 +100,7 @@ def load_variants(directory, labels_path):
         print(f"An error occurred: {e}")
         print(f"There is an issue with one of your files.")
 
-    labels = pd.read_csv(labels_path, sep='\t').fillna(0)
+    labels = pd.read_csv(labels_path, sep=',').fillna(0)
     labels['Label'] = labels['Label'].apply(lambda x: 1 if str(x).lower() in ['real', '1'] else 0)
     labels = labels[['Sample', 'Variant', 'Label']] # In case the Cohort column got saved accidentally
 
