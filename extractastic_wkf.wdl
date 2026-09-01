@@ -53,7 +53,7 @@ workflow ExtractasticWkf {
 
     # gather split VCF filenames to avoid glob that can fail on prem
     Int count = 20
-    scatter (i in range(count)) {
+    scatter (i in range(count + 1)) {
         Int num = i + 1
         String suffixes = "${num}"
     }
