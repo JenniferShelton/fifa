@@ -3,6 +3,9 @@
 import sys
 import pandas as pd
 import gzip
+import logging as log
+
+log.basicConfig(level=log.INFO)
 
 
 def vcf_line_to_hgvs_g(vcf_line: str) -> str:
@@ -33,6 +36,7 @@ def vcf_line_to_hgvs_g(vcf_line: str) -> str:
 if __name__ == "__main__":
     table=sys.argv[1]
     vcf=sys.argv[2]
+    pairId=sys.argv[3]
     hgvs_gs = []
     with gzip.open(vcf, 'rt') as vcf_file:
         for line in vcf_file:
@@ -44,8 +48,10 @@ if __name__ == "__main__":
     features_df = pd.read_csv(table)
     t_hgvs_gs = features_df['Variant'].tolist()
     if set(t_hgvs_gs).difference(set(hgvs_gs)):
-        print("Variants in feature table but not in VCF:")
-        print(set(t_hgvs_gs).difference(set(hgvs_gs)))
+        log.warning("Variants in feature table but not in VCF:")
+        log.warning(set(t_hgvs_gs).difference(set(hgvs_gs)))
+        print(f"{pairId},VariantDiscrepancyFromFeatureTable,{len(t_hgvs_gs) - len(hgvs_gs)}")
     if set(hgvs_gs).difference(set(t_hgvs_gs)):
-        print("Variants in VCF but not in feature table:")
-        print(set(hgvs_gs).difference(set(t_hgvs_gs)))
+        log.warning("Variants in VCF but not in feature table:")
+        log.warning(set(hgvs_gs).difference(set(t_hgvs_gs)))
+        print(f"{pairId},VariantDiscrepancyFromVcf,{len(hgvs_gs) - len(t_hgvs_gs)}")

@@ -37,6 +37,7 @@ workflow ExtractasticWkf {
         IndexedVcf vcf
         IndexedReference referenceFa
         # resources
+        Int maxSplits = 40
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
@@ -52,7 +53,7 @@ workflow ExtractasticWkf {
     }
 
     # gather split VCF filenames to avoid glob that can fail on prem
-    Int count = 20
+    Int count = maxSplits
     scatter (i in range(count)) {
         Int num = i + 1
         String suffixes = "${num}"
@@ -68,7 +69,7 @@ workflow ExtractasticWkf {
             vcf = vcf.vcf,
             prefix = prefix,
             diskSize = (ceil(size(vcf.vcf, "GB")) * 3) + 10,
-            maxSplits = 20,
+            maxSplits = maxSplits,
             splitVcfPaths = splitVcfPaths
     }
     Array[File] splitVcfs = select_all(SplitVcf.splitVcfs)

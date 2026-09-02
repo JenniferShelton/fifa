@@ -5,6 +5,7 @@ set -euo pipefail
 
 table=$1
 vcf=$2
+pairId=$3
 
 # count feature table rows excluding header
 if [[ -z ${table} ]]; then
@@ -25,7 +26,6 @@ if [[ -e ${vcf} ]]; then
         count=$(grep -v "^#" ${vcf} | grep "TYPE=SNV" | wc -l) # successfully validated but not empty
     else
         >&2  echo "ERROR: VCF file in unexpected format :" ${vcf}
-        echo "False"
         exit 1
     fi
 else
@@ -33,9 +33,9 @@ else
 fi
 
 if [[ "$feature_count" -ne "$count" ]]; then
-    echo "${count}"
-    echo ${feature_count}
-    echo "The VCF and feature table counts are not equal."
+    echo "${pairId},featureCountDiscrepancy,${feature_count}vs${count}"
+    >&2 echo "The VCF and feature table counts are not equal."
+    >&2 echo "Feature count: ${feature_count}, VCF count: ${count}"
     exit 1
 fi
 
