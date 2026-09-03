@@ -60,13 +60,20 @@ def trim_fasta_read(header: str, read, adapter: str) -> str:
     input_fastq = pileup_read_to_fastq(read)
     
     # Run cutadapt via stdin/stdout
-    result = subprocess.run(
-        ["cutadapt", "-a", adapter, "-"],
-        input=input_fastq,
-        text=True,
-        capture_output=True,
-        check=True
-    )
+    try:
+        result = subprocess.run(
+            ["cutadapt", "-a", adapter, "-"],
+            input=input_fastq,
+            text=True,
+            capture_output=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as error:
+        logger.error("cutadapt failed with exit code %s", error.returncode)
+        logger.error("cutadapt STDOUT:\n%s", error.stdout or "<empty>")
+        logger.error("cutadapt STDERR:\n%s", error.stderr or "<empty>")
+        logger.error("FASTQ sent to cutadapt:\n%s", input_fastq)
+        raise
     
     # Extract the trimmed sequence from the output fastq
     lines = result.stdout.strip().split("\n")

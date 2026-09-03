@@ -673,7 +673,8 @@ task MobsterFit {
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
-        Int memoryGb = 8
+        # 8 memoryGb was fine for all but the worst cases
+        Int memoryGb = 96
         Int diskSize = 10
         String qos = "compbio"
         String partition = "cpu"
@@ -719,7 +720,7 @@ task ExtractionWithMobsterFit {
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
-        Int memoryGb = 48
+        Int memoryGb = 8
         Int diskSize
         String qos = "compbio"
         String partition = "cpu"
