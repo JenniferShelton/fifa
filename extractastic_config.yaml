@@ -1,0 +1,9 @@
+# Replace every value below with paths for the sample being processed.
+sample_id: SAMPLE_ID
+project_id: PROJECT_ID
+bam: /path/to/sample.bam
+bam_index: /path/to/sample.bam.bai
+vcf: /path/to/sample.vcf.gz
+reference: /path/to/reference.fa
+reference_index: /path/to/reference.fa.fai
+threads: 1
