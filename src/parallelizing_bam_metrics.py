@@ -37,28 +37,65 @@ import unicodedata
 
 global logger
 
+def get_max_len(bamfile, chrom=None, left=0, right=None, limit=2000):
+    """Return the maximum read length among the first few reads in a BAM region."""
+    if chrom is None:
+        max_read_len = 0
+        for reference_name in bamfile.references:
+            reference_length = bamfile.get_reference_length(reference_name)
+            region_max = get_max_len(
+                bamfile,
+                chrom=reference_name,
+                left=0,
+                right=reference_length,
+                limit=limit,
+            )
+            if region_max > max_read_len:
+                max_read_len = region_max
+        return max_read_len
+
+    if right is None:
+        right = bamfile.get_reference_length(chrom)
+
+    max_read_len = 0
+    read_count = 0
+    for read in bamfile.fetch(chrom, left, right):
+        if read_count >= limit:
+            break
+        read_count += 1
+        read_len = len(read.query_sequence)
+        if read_len > max_read_len:
+            max_read_len = read_len
+    return max_read_len
+
+
 def pileup_read_to_fastq(read) -> str:
     """
     Converts a pysam AlignedSegment into a 4-line FASTQ string.
     """
-    # Convert integer quality scores to Phred+33 ASCII characters
-    # pysam stores query_qualities as an array of integers (e.g., [30, 32, ...])
-    if read.query_qualities is not None:
-        qualities = "".join(chr(q + 33) for q in read.query_qualities)
+    query_sequence = read.query_sequence
+    query_qualities = read.query_qualities
+
+    if query_qualities is not None:
+        quality_string = "".join(chr(q + 33) for q in query_qualities)
+        if len(quality_string) < len(query_sequence):
+            quality_string += "G" * (len(query_sequence) - len(quality_string))
+        elif len(quality_string) > len(query_sequence):
+            quality_string = quality_string[: len(query_sequence)]
     else:
         # Fallback if no quality scores exist
-        qualities = "~" * len(read.query_sequence)
-        
+        quality_string = "~" * len(query_sequence)
+
     # 4. Format into a standard 4-line FASTQ string
-    fastq_string = f"@{read.query_name}\n{read.query_sequence}\n+\n{qualities}\n"
+    fastq_string = f"@{read.query_name}\n{query_sequence}\n+\n{quality_string}\n"
     return fastq_string
 
 
-def trim_fasta_read(header: str, read, adapter: str) -> str:
-    """Trim a 3' adapter from a single FASTQ read using cutadapt."""
+def trim_fasta_read(header: str, read, adapter: str) -> int:
+    """Trim a 3' adapter from a single FASTQ read and return the trimmed length."""
     # Build the input fastq string
     input_fastq = pileup_read_to_fastq(read)
-    
+
     # Run cutadapt via stdin/stdout
     try:
         result = subprocess.run(
@@ -74,11 +111,11 @@ def trim_fasta_read(header: str, read, adapter: str) -> str:
         logger.error("cutadapt STDERR:\n%s", error.stderr or "<empty>")
         logger.error("FASTQ sent to cutadapt:\n%s", input_fastq)
         raise
-    
+
     # Extract the trimmed sequence from the output fastq
     lines = result.stdout.strip().split("\n")
     trimmed_sequence = "".join(lines[1:2]) if len(lines) > 1 else ""
-    return trimmed_sequence
+    return len(trimmed_sequence)
 
 def is_read_filtered(read):
     """
@@ -111,7 +148,7 @@ def is_read_filtered(read):
 
     return mutect_filtered
 
-def process_cigar_tupples(read, reference_pos, adapter: str):
+def process_cigar_tupples(read, reference_pos, adapter: str, max_read_len: int = 0):
     """
     Process cigar string to get distance to effective 5' and 3' end
     and position of the variant in the read (both with and without
@@ -134,20 +171,26 @@ def process_cigar_tupples(read, reference_pos, adapter: str):
     """    
     if not(read.cigarstring):
         return (None, None, None, None, None)
-    
+
+    read_len = len(read.query_sequence)
     ref_pos_in_read = read.reference_start
     real_position_in_read = 0 # position of the variant in the read, including hard clipped bases
     distance_to_5prime = distance_to_3prime = 0
     trimmed_length = 0
-    
+
     clipped_length = 0
     cigartuples = read.cigartuples
     clipped_length = sum([l for op, l in cigartuples if op in (4, 5)])
     if clipped_length > 0:
-        trimmed_seq = trim_fasta_read(header='clipped_alignment', 
-                                        read=read, 
-                                        adapter=adapter)
-        trimmed_length = len(read.query_sequence) - len(trimmed_seq)
+        if read_len == max_read_len:
+            trimmed_sequence_len = trim_fasta_read(
+                header='clipped_alignment',
+                read=read,
+                adapter=adapter,
+            )
+        else:
+            trimmed_sequence_len = read_len
+        trimmed_length = max_read_len - trimmed_sequence_len if max_read_len > 0 else 0
     for operation, length in cigartuples:
         if operation == 0: # Match or mismatch
             if ref_pos_in_read <= reference_pos:  
@@ -355,7 +398,7 @@ def iter_pileup_columns(bamfile, chrom, pos):
 
 
 def process_variant(queue, sample, cohort, bam_path, ref_seq, adapter,
-                    worker_output_path):
+                    worker_output_path, max_read_len=0):
     bamfile = pysam.AlignmentFile(bam_path, "rb", reference_filename=ref_seq)
     fastafile = pysam.FastaFile(ref_seq)
     feature_rows = []
@@ -415,7 +458,7 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, adapter,
                         ## This is probably inefficient... there must be ways to do this with pysam without
                         ## the need for extra methods 
                         read_index, distance_5prime, distance_3prime, clipped_length, trimmed_length = \
-                            process_cigar_tupples(read, pos, adapter)
+                            process_cigar_tupples(read, pos, adapter, max_read_len=max_read_len)
 
                         if query_index is None \
                                 or query_index < 0 \
@@ -479,16 +522,30 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, adapter,
             
             alignment_seq = fastafile.fetch(chrom, left, right)
 
-            metrics.set_metric('window_gc_cont', gc_fraction(alignment_seq))
-            metrics.set_metric('window_seq_entropy', entropy(np.unique(list(alignment_seq), return_counts=True)[1] / len(alignment_seq), base=2))
-            
+            if len(alignment_seq) == 0:
+                metrics.set_metric('window_gc_cont', 0)
+                metrics.set_metric('window_seq_entropy', 0)
+            else:
+                metrics.set_metric('window_gc_cont', gc_fraction(alignment_seq))
+                metrics.set_metric('window_seq_entropy', entropy(np.unique(list(alignment_seq), return_counts=True)[1] / len(alignment_seq), base=2))
+
             median_cov, cov_variance = get_coverage_in_window(bamfile, fastafile, chrom, left, right)
             if median_cov is None or median_cov == 0:
+                metrics.set_metric('window_median_cov', 0)
+                metrics.set_metric('window_cov_variance', 0)
                 metrics.set_metric('window_min_cov_ratio', None)
                 metrics.set_metric('window_max_cov_ratio', None)
-                continue
-            metrics.set_metric('window_median_cov', median_cov)
-            metrics.set_metric('window_cov_variance', cov_variance)
+                metrics.set_metric('window_median_frag_len', 0)
+                metrics.set_metric('window_dup_frac', 0)
+                metrics.set_metric('window_multi_frac', 0)
+                metrics.set_metric('window_improper_frac', 0)
+                metrics.set_metric('window_median_mapq', 0)
+                metrics.set_metric('window_read_filter_frac', 0)
+                metrics.set_metric('trinucleotide_context', "")
+                metrics.set_metric('pentanucleotide_context', "")
+            else:
+                metrics.set_metric('window_median_cov', median_cov)
+                metrics.set_metric('window_cov_variance', cov_variance)
             
             left_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *left_window)[0]
             right_window_median_cov = get_coverage_in_window(bamfile, fastafile, chrom, *right_window)[0]
@@ -496,7 +553,8 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, adapter,
             left_window_median_cov = left_window_median_cov if left_window_median_cov is not None else 0
             right_window_median_cov = right_window_median_cov if right_window_median_cov is not None else 0
 
-            metrics.update_coverage_ratios(left=left_window_median_cov, right=right_window_median_cov)
+            if median_cov is not None and median_cov > 0:
+                metrics.update_coverage_ratios(left=left_window_median_cov, right=right_window_median_cov)
 
             fractions = get_read_fractions(bamfile, chrom, left, right)
             metrics.set_metric('window_median_frag_len', fractions[0])
@@ -509,10 +567,14 @@ def process_variant(queue, sample, cohort, bam_path, ref_seq, adapter,
             ## Extract flanking bases and format using universal convention:
             ## 5' flank(s) [Ref>Alt] 3' flank(s), reverse complemented to the pyrimidine convention
             sequence = fastafile.fetch(chrom, pos - 3, pos + 2)
-            trinucleotide_context = f'{sequence[1]}[{ref}>{alt}]{sequence[3]}'
-            pentanucleotide_context = f'{sequence[0:2]}[{ref}>{alt}]{sequence[3:5]}'
-            metrics.set_metric('trinucleotide_context', to_pyrimidine_context(trinucleotide_context))
-            metrics.set_metric('pentanucleotide_context', to_pyrimidine_context(pentanucleotide_context))
+            if len(sequence) >= 5:
+                trinucleotide_context = f'{sequence[1]}[{ref}>{alt}]{sequence[3]}'
+                pentanucleotide_context = f'{sequence[0:2]}[{ref}>{alt}]{sequence[3:5]}'
+                metrics.set_metric('trinucleotide_context', to_pyrimidine_context(trinucleotide_context))
+                metrics.set_metric('pentanucleotide_context', to_pyrimidine_context(pentanucleotide_context))
+            else:
+                metrics.set_metric('trinucleotide_context', "")
+                metrics.set_metric('pentanucleotide_context', "")
         
         except Exception as e:
             '''
@@ -646,7 +708,21 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label,
         exit(1) 
 
     start = time.time()
-    
+
+    with pysam.AlignmentFile(bam_path, "rb", reference_filename=ref_seq) as bamfile:
+        max_read_len = 0
+        for reference_name in bamfile.references:
+            reference_length = bamfile.get_reference_length(reference_name)
+            region_max = get_max_len(
+                bamfile,
+                chrom=reference_name,
+                left=0,
+                right=reference_length,
+                limit=2000,
+            )
+            if region_max > max_read_len:
+                max_read_len = region_max
+
     queue = Queue(maxsize=500)
     temporary_directory = tempfile.mkdtemp(
         prefix='fifa_features_',
@@ -665,7 +741,7 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label,
         pool = [
             Process(
                 target=process_variant,
-                args=(queue, sample, cohort, bam_path, ref_seq, adapter, worker_output_path),
+                args=(queue, sample, cohort, bam_path, ref_seq, adapter, worker_output_path, max_read_len),
             )
             for worker_output_path in worker_output_paths
         ]
@@ -726,6 +802,17 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label,
                 except AttributeError:
                     P.terminate()
                 P.join(timeout=5)
+                if P.is_alive():
+                    try:
+                        P.terminate()
+                    except Exception:
+                        pass
+
+        try:
+            queue.close()
+            queue.join_thread()
+        except Exception:
+            pass
 
         if failed_process is not None:
             exit_code = failed_process.exitcode if failed_process.exitcode is not None else 1
@@ -744,7 +831,15 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label,
             for worker_output_path in worker_output_paths
             if os.path.exists(worker_output_path) and os.path.getsize(worker_output_path) > 0
         ]
-        extracted_features = pd.concat(feature_frames, ignore_index=True)
+        if feature_frames:
+            extracted_features = pd.concat(feature_frames, ignore_index=True)
+        else:
+            default_metrics = MetricsDictionary(sample=sample, cohort=cohort, index=-1).get_all_metrics()
+            output_columns = ['Variant'] + sorted(
+                key for key in default_metrics
+                if key not in {'Variant', 'Sample', 'Cohort', 'vcf_index'}
+            )
+            extracted_features = pd.DataFrame(columns=output_columns)
         num_vars = len(extracted_features)
 
         if not skip_mobster:
