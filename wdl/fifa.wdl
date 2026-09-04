@@ -718,7 +718,7 @@ task ExtractionWithMobsterFit {
         File mobsterFitRds
         String extractedFeaturesPath = "~{sampleId}_extracted_features.csv"
         # resources
-        Int threads = 1
+        Int threads = 4
         Int runRequestThreads =  ceil(threads / 2.0)
         Int memoryGb = 8
         Int diskSize

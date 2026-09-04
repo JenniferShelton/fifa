@@ -53,7 +53,11 @@ workflow ExtractasticWkf {
     }
 
     # gather split VCF filenames to avoid glob that can fail on prem
-    Int count = maxSplits
+    Int vcfDiskSize = ceil(size(vcf.vcf, "MB")) 
+    if ( vcfDiskSize > 10) {
+        Int highMaxSplits = 100
+    }
+    Int count = select_first([highMaxSplits, maxSplits])
     scatter (i in range(count + 1)) {
         Int num = i + 1
         String suffixes = "${num}"
@@ -69,7 +73,7 @@ workflow ExtractasticWkf {
             vcf = vcf.vcf,
             prefix = prefix,
             diskSize = (ceil(size(vcf.vcf, "GB")) * 3) + 10,
-            maxSplits = maxSplits,
+            maxSplits = count,
             splitVcfPaths = splitVcfPaths
     }
     Array[File] splitVcfs = select_all(SplitVcf.splitVcfs)
