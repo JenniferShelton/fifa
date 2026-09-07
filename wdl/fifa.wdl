@@ -583,7 +583,7 @@ task ExtractionMobsterFree {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:28c10d5620e3cd37a0397ffa230d8fcbd264dce9f1eab22aeb0fc5de0beced25"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -657,7 +657,7 @@ task Extraction {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:28c10d5620e3cd37a0397ffa230d8fcbd264dce9f1eab22aeb0fc5de0beced25"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -700,7 +700,7 @@ task MobsterFit {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:28c10d5620e3cd37a0397ffa230d8fcbd264dce9f1eab22aeb0fc5de0beced25"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
         runtime_minutes: "300"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -736,6 +736,7 @@ task ExtractionWithMobsterFit {
         threads="~{threads}"
         referenceFa="~{referenceFa.fasta}"
         mobsterFitRds="~{mobsterFitRds}"
+        extractedFeaturesPath="~{extractedFeaturesPath}"
 
         export TMPDIR=/tmp/
         mkdir -p ${TMPDIR}
@@ -780,7 +781,7 @@ task ExtractionWithMobsterFit {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:28c10d5620e3cd37a0397ffa230d8fcbd264dce9f1eab22aeb0fc5de0beced25"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -830,7 +831,7 @@ task Prediction {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:28c10d5620e3cd37a0397ffa230d8fcbd264dce9f1eab22aeb0fc5de0beced25"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
@@ -883,7 +884,7 @@ task PredictionWithRna {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:28c10d5620e3cd37a0397ffa230d8fcbd264dce9f1eab22aeb0fc5de0beced25"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -927,7 +928,7 @@ task Merge {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:28c10d5620e3cd37a0397ffa230d8fcbd264dce9f1eab22aeb0fc5de0beced25"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
@@ -978,7 +979,7 @@ task ReTraining {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:28c10d5620e3cd37a0397ffa230d8fcbd264dce9f1eab22aeb0fc5de0beced25"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
         runtime_minutes: "300"
         partition: "cpu"
         cpuPlatform : cpuPlatform
