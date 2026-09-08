@@ -826,11 +826,15 @@ def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label,
             logger.error("Feature extraction exiting with worker failure code %s", failed_exit_code)
             raise SystemExit(failed_exit_code)
         
-        feature_frames = [
-            pd.read_csv(worker_output_path)
-            for worker_output_path in worker_output_paths
-            if os.path.exists(worker_output_path) and os.path.getsize(worker_output_path) > 0
-        ]
+        feature_frames = []
+        for worker_output_path in worker_output_paths:
+            if not os.path.exists(worker_output_path) or os.path.getsize(worker_output_path) == 0:
+                continue
+            try:
+                feature_frames.append(pd.read_csv(worker_output_path))
+            except pd.errors.EmptyDataError:
+                # Worker produced no rows (only the blank line from an empty DataFrame write)
+                continue
         if feature_frames:
             extracted_features = pd.concat(feature_frames, ignore_index=True)
         else:
