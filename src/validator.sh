@@ -12,8 +12,7 @@ if [[ -z ${table} ]]; then
     >&2  echo 'ERROR: No file argument provided'
     exit 1
 elif [[ -s ${table} ]]; then
-    line_count=$( grep -v "^#" ${table} | wc -l )
-    feature_count=$( echo ${line_count} - 1 | bc )
+    feature_count=$( tail -n +2 ${table} | wc -l )
 else
     >&2  echo 'ERROR: file does not exist or is empty. Script requires at least a file with a header line.'
     exit 1

@@ -717,6 +717,7 @@ task ExtractionWithMobsterFit {
         IndexedReference referenceFa
         File mobsterFitRds
         String extractedFeaturesPath = "~{sampleId}_extracted_features.csv"
+        File validatorSh = "/gpfs/commons/groups/compbio/projects/FFPE_filtering/repos/fifa/src/validator.sh"
         # resources
         Int threads = 4
         Int runRequestThreads =  ceil(threads / 2.0)
@@ -765,7 +766,8 @@ task ExtractionWithMobsterFit {
             -o . \
             -n ${threads} \
             --mobster-fit-rds ${mobsterFitRds}
-        bash /opt/fifa/src/validator.sh \
+        # bash /opt/fifa/src/validator.sh \
+        bash ~{validatorSh} \
             ${extractedFeaturesPath} \
             ${new_vcf} \
             ${sampleId} 
