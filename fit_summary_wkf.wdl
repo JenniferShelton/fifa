@@ -89,7 +89,6 @@ workflow FitPrintWkf {
         Array[String] sampleIds
         Array[IndexedVcf] vcfs
         # resources
-        Int maxSplits = 40
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
@@ -123,6 +122,6 @@ workflow FitPrintWkf {
     output {
         File fitCsv = ConcateTables.outputTable
         Array[File] fitPng = DescribeMobsterFit.fitPng
-        Array[File] mobsterFitRds = DescribeMobsterFit.mobsterFitRds
+        Array[File] mobsterFitRds = MobsterFit.mobsterFitRds
     }
 }
