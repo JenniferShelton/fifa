@@ -27,6 +27,7 @@ vcf_data <- data.frame(
   as_tibble()
 
 fit <- vcf_data %>%
+  dplyr::filter(VAF < 1) %>%
   mobster::mobster_fit(
     .,
     K = c(1, 2, 3),
