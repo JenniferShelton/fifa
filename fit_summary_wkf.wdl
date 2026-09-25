@@ -95,10 +95,10 @@ workflow FitPrintWkf {
     }
 
     scatter (i in range(length(sampleIds))){
-        call fifaTasks.MobsterFit {
+        call fifaTasks.MobsterFitCommpressed {
             input:
                 sampleId = sampleIds[i],
-                vcf = vcfs[i].vcf,
+                vcf = vcfs[i],
                 qos = qos,
                 partition = partition,
                 cpuPlatform = cpuPlatform
@@ -106,7 +106,7 @@ workflow FitPrintWkf {
         call DescribeMobsterFit {
             input:
                 sampleId = sampleIds[i],
-                mobsterFitRds =  MobsterFit.mobsterFitRds,
+                mobsterFitRds =  MobsterFitCommpressed.mobsterFitRds,
                 qos = qos,
                 partition = partition,
                 cpuPlatform = cpuPlatform
@@ -122,6 +122,6 @@ workflow FitPrintWkf {
     output {
         File fitCsv = ConcateTables.outputTable
         Array[File] fitPng = DescribeMobsterFit.fitPng
-        Array[File] mobsterFitRds = MobsterFit.mobsterFitRds
+        Array[File] mobsterFitRds = MobsterFitCommpressed.mobsterFitRds
     }
 }

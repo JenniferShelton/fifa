@@ -665,6 +665,49 @@ task Extraction {
     }
 }
 
+task MobsterFitCommpressed {
+    input {
+        String sampleId
+        IndexedVcf vcf
+        String mobsterFitRdsPath = "~{sampleId}.mobster_fit.rds"
+        # resources
+        Int threads = 1
+        Int runRequestThreads =  ceil(threads / 2.0)
+        # 8 memoryGb was fine for all but the worst cases
+        Int memoryGb = 96
+        Int diskSize = 10
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+    }
+    command <<<
+        set -e -o pipefail
+
+        Rscript \
+        /opt/fifa/src/run_mobster_fit.R \
+        ~{sampleId} \
+        ~{vcf.vcf} \
+        ~{mobsterFitRdsPath}
+    >>>
+
+    output {
+        File mobsterFitRds = mobsterFitRdsPath
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " LOCAL"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:4d619b54f731beec7eb94f9f6b9550463dfd306a4dc681411fb6a585107f5bf8"
+        runtime_minutes: "300"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}
+
 task MobsterFit {
     input {
         String sampleId

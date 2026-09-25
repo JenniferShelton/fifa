@@ -27,13 +27,12 @@ vcf_data <- data.frame(
   as_tibble()
 
 fit <- vcf_data %>%
-  dplyr::filter(VAF >= 0.05 & VAF < 1) %>%
   mobster::mobster_fit(
     .,
     K = c(1, 2, 3),
     samples = 1,
     init = "random",
-    tail = TRUE,
+    tail = FALSE,
     epsilon = 1e-06,
     maxIter = 100,
     fit.type = "MM",
