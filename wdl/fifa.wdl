@@ -679,12 +679,13 @@ task MobsterFitCommpressed {
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
+        File mobsterFitScript = "/gpfs/commons/groups/compbio/projects/FFPE_filtering/repos/fifa/src/run_mobster_fit.R"
     }
     command <<<
         set -e -o pipefail
 
         Rscript \
-        /opt/fifa/src/run_mobster_fit.R \
+        ~{mobsterFitScript} \
         ~{sampleId} \
         ~{vcf.vcf} \
         ~{mobsterFitRdsPath}
@@ -722,12 +723,15 @@ task MobsterFit {
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
+        File mobsterFitScript = "/gpfs/commons/groups/compbio/projects/FFPE_filtering/repos/fifa/src/run_mobster_fit.R"
     }
     command <<<
         set -e -o pipefail
 
+        # /opt/fifa/src/run_mobster_fit.R \
+
         Rscript \
-        /opt/fifa/src/run_mobster_fit.R \
+        ~{mobsterFitScript} \
         ~{sampleId} \
         ~{vcf} \
         ~{mobsterFitRdsPath}

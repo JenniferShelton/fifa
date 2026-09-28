@@ -30,7 +30,7 @@ fit <- vcf_data %>%
   dplyr::filter(VAF < 1) %>%
   mobster::mobster_fit(
     .,
-    K = c(1, 2, 3),
+    K = c(2, 3),
     samples = 1,
     init = "random",
     tail = FALSE,
@@ -42,7 +42,7 @@ fit <- vcf_data %>%
     trace = FALSE,
     parallel = FALSE,
     pi_cutoff = 0.02,
-    N_cutoff = 10,
+    N_cutoff = 20,
     silent = FALSE
   ) %>%
   try()

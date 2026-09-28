@@ -36,6 +36,10 @@ task DescribeMobsterFit {
         File mobsterFitRds
         String fitPngPath = "~{sampleId}.mobster_fit.png"
         String fitCsvPath = "~{sampleId}.mobster_fit.csv"
+        String fitProbCsvPath = "~{sampleId}.mobster_fit.prob.csv"
+        String fitPngK2Path = "~{sampleId}.mobster_fit.k2.png"
+        String fitCsvK2Path = "~{sampleId}.mobster_fit.k2.csv"
+        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.prob.k2.csv"
         File fitPrintRscript = "/gpfs/commons/groups/compbio/projects/FFPE_filtering/repos/fifa/src/run_fit_print.R"
         # resources
         Int threads = 1
@@ -66,6 +70,10 @@ task DescribeMobsterFit {
     output {
         File fitCsv = fitCsvPath
         File fitPng = fitPngPath
+        File fitProbCsv = fitProbCsvPath
+        File? fitPngK2 = fitPngK2Path
+        File? fitCsvK2 = fitCsvK2Path
+        File? fitProbCsvK2 = fitProbCsvK2Path
     }
 
     runtime {
@@ -119,9 +127,17 @@ workflow FitPrintWkf {
             outputTablePath = "~{projectId}.mobster_fit.csv"
     }
 
+    Array[File] fitPngK2Run = select_all(DescribeMobsterFit.fitPngK2)
+    Array[File] fitCsvK2Run = select_all(DescribeMobsterFit.fitCsvK2)
+    Array[File] fitProbCsvK2Run = select_all(DescribeMobsterFit.fitProbCsvK2)
+
     output {
         File fitCsv = ConcateTables.outputTable
         Array[File] fitPng = DescribeMobsterFit.fitPng
         Array[File] mobsterFitRds = MobsterFitCommpressed.mobsterFitRds
+        Array[File] fitProbCsv = DescribeMobsterFit.fitProbCsv
+        Array[File] fitPngK2 = fitPngK2Run
+        Array[File] fitCsvK2 = fitCsvK2Run
+        Array[File] fitProbCsvK2 = fitProbCsvK2Run
     }
 }
