@@ -206,6 +206,28 @@ def plot_init_grid(
     figure.tight_layout()
     return figure, summaries
 
+def plot_vaf_prob_scatter_plot(vaf_probs, c_lowest, 
+                                tumorId,
+                                ax=None):
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 5))
+    figure = ax.figure
+    print(c_lowest)
+    ax.scatter(x=vaf_probs['VAF'].tolist(),
+        y=vaf_probs[c_lowest].tolist(),
+        color='magenta',
+        label='FFPE variant',
+        alpha=0.5
+    )
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_xlabel('Observed VAF')
+    ax.set_ylabel('Probability in artifact peak')
+    ax.set_title(f'TumorID: {tumorId}')
+    ax.legend(title='Prob of C lowest')
+    figure.tight_layout()
+    return figure
+
 
 def plot_truth_histogram(tumorId, df, ax=None):
     tumor_df = df.loc[df["TumorID"].eq(tumorId)].copy()
@@ -247,58 +269,161 @@ def plot_truth_histogram(tumorId, df, ax=None):
     figure.tight_layout()
     return figure
 
+def get_c_lowest(probs, sampleId):
+    """Get the cluster with the lowest mean VAF from a MOBSTER probability DataFrame.
+    """
+    probs = probs[probs['sampleId'] == sampleId].copy()
+    if probs.empty:
+        return []
+    clone_names = [
+        c for c in probs['cluster'].unique().tolist()
+        if str(c).startswith('C')
+    ]
+    if not clone_names:
+        return []
+    clusters = {int(str(c).replace('C', '')): c for c in clone_names}
+    c_lowest = clusters[max(clusters.keys())]
+    return probs[["VAF", c_lowest]]
 
 def plot_comparison_grid(
         sampleIds: Sequence[object],
         ncols: int,
         fifa_result: pd.DataFrame,
         dataframe: pd.DataFrame,
-    ) -> Tuple[Figure, List[pd.DataFrame]]:
-    """Plot several samples in input order on a grid ``ncols`` wide.
+        dataframe_k2: pd.DataFrame,
+        probabilities: Optional[pd.DataFrame] = None,
+        probabilities_k2: Optional[pd.DataFrame] = None,
+        plot_filename: Optional[Union[str, Path]] = None,
+        print_plots: bool = False,
+    ) -> Tuple[List[Figure], pd.DataFrame]:
+    """Plot comparison panels in pages of 10 rows by ``ncols`` columns.
 
-    The per-sample plots and CSV summaries are produced by :func:`plot_init`.
-    The returned summaries are ordered the same way as ``sampleIds``.
+    ``sampleIds`` contains consecutive triplets for the FF, FFPE, and truth
+    samples used by each comparison.  Each triplet produces four panels.  The
+    returned summary DataFrame is concatenated in the same order as the
+    plotted panels.  If ``print_plots`` is true, figures are saved using
+    ``plot_filename``; multiple figures receive numbered filenames.
     """
     sampleIds = list(sampleIds)
     if not sampleIds:
         raise ValueError("sampleIds must contain at least one sample ID")
     if not isinstance(ncols, int) or isinstance(ncols, bool) or ncols < 1:
         raise ValueError("ncols must be a positive integer")
+    if not isinstance(print_plots, bool):
+        raise ValueError("print_plots must be a boolean")
+    if print_plots and plot_filename is None:
+        raise ValueError("plot_filename is required when print_plots=True")
 
-    nrows = int(np.ceil(len(sampleIds) / ncols))
-    figure, axes = plt.subplots(
-        nrows=nrows,
-        ncols=ncols,
-        figsize=(6.0 * ncols, 4.5 * nrows),
-        squeeze=False,
-    )
-    axes = axes.ravel()
+    nfigures = int(np.ceil(len(sampleIds) / 10))
+    nrows = 10
+    comparison_groups = [
+        tuple(sampleIds[index:index + 3])
+        for index in range(0, len(sampleIds), 3)
+        if len(sampleIds[index:index + 3]) == 3
+    ]
+    valid_groups = [
+        group for group in comparison_groups
+        if group[2] in fifa_result.TumorID.values
+    ]
+    panels_per_figure = nrows * ncols
+    if len(valid_groups) * 4 > nfigures * panels_per_figure:
+        raise ValueError(
+            "ncols is too small to fit the four comparison panels per sample "
+            "triplet in the requested number of figures"
+        )
 
-    summaries = []
-    index=0
-    iterator = iter(sampleIds)
-    for ffSampleId, ffpeSampleId, secondFfpeSampleId in zip(iterator, 
-                                                            iterator, 
-                                                            iterator):
-        if secondFfpeSampleId in fifa_result.TumorID.values:
-            _, summary = plot_init(ffSampleId, dataframe, 
-                                    ax=axes[index])
-            summaries.append(summary)
-            index += 1
-            _, summary = plot_init(ffpeSampleId, dataframe,
-                                    ax=axes[index])
-            summaries.append(summary)
-            index += 1
-            _ = plot_truth_histogram(secondFfpeSampleId, fifa_result, 
-                                    ax=axes[index])
-            summaries.append(summary)
-            index += 1
+    base_groups_per_figure, extra_groups = divmod(len(valid_groups), nfigures)
+    group_chunks = []
+    group_start = 0
+    for figure_index in range(nfigures):
+        groups_in_figure = base_groups_per_figure + (figure_index < extra_groups)
+        group_chunks.append(valid_groups[group_start:group_start + groups_in_figure])
+        group_start += groups_in_figure
+    if any(len(chunk) * 4 > panels_per_figure for chunk in group_chunks):
+        raise ValueError(
+            "ncols is too small to fit a page of comparison panels in 10 rows"
+        )
 
-    for unused_ax in axes[len(sampleIds):]:
-        unused_ax.set_visible(False)
+    figures = []
+    summary_frames = []
+    variant_frames = []
+    for figure_number, groups_for_figure in enumerate(group_chunks, start=1):
+        figure, axes = plt.subplots(
+            nrows=nrows,
+            ncols=ncols,
+            figsize=(6.0 * ncols, 4.5 * nrows),
+            squeeze=False,
+        )
+        axes = axes.ravel()
+        panel_index = 0
 
-    figure.tight_layout()
-    return figure, summaries
+        for ffSampleId, ffpeSampleId, secondFfpeSampleId in groups_for_figure:
+            clones = dataframe.cluster.unique().tolist()
+            if len(clones) > 1:
+                df = dataframe
+                probs = probabilities
+            elif secondFfpeSampleId in dataframe_k2.sampleId.values:
+                df = dataframe_k2
+                probs = probabilities_k2
+            else:
+                df = dataframe
+                probs = probabilities
+
+            _, ff_summary = plot_init(ffSampleId, df, ax=axes[panel_index])
+            # summary_frames.append(ff_summary)
+            panel_index += 1
+
+            _, ffpe_summary = plot_init(ffpeSampleId, df, ax=axes[panel_index])
+            # summary_frames.append(ffpe_summary)
+            panel_index += 1
+
+            plot_truth_histogram(secondFfpeSampleId, fifa_result, ax=axes[panel_index])
+            panel_index += 1
+
+            vaf_probs = get_c_lowest(probs, secondFfpeSampleId)
+            c_lowest = [column for column in vaf_probs.columns if column != "VAF"][0]
+            plot_vaf_prob_scatter_plot(
+                vaf_probs,
+                c_lowest,
+                tumorId=secondFfpeSampleId,
+                ax=axes[panel_index],
+            )
+            variant_df = df[(df.sampleId == secondFfpeSampleId)].copy()
+            variant_df["c_lowest"] = vaf_probs[c_lowest]
+            variant_df["c_lowest_name"] = c_lowest
+            summary_frames.append(ffpe_summary)
+            variant_frames.append(variant_df)
+            panel_index += 1
+
+        for unused_ax in axes[panel_index:]:
+            unused_ax.set_visible(False)
+
+        figure.tight_layout()
+        if print_plots:
+            output_path = Path(plot_filename)
+            if output_path.suffix:
+                suffix = output_path.suffix
+                stem = output_path.stem
+            else:
+                suffix = ".png"
+                stem = output_path.name
+            if nfigures > 1:
+                output_path = output_path.with_name(
+                    f"{stem}_{figure_number}{suffix}"
+                )
+            else:
+                output_path = output_path.with_suffix(suffix)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            figure.savefig(output_path, bbox_inches="tight")
+        figures.append(figure)
+
+    if summary_frames:
+        summaries = pd.concat(summary_frames, ignore_index=True)
+        variants = pd.concat(variant_frames, ignore_index=True)
+    else:
+        summaries = pd.DataFrame()
+        variants = pd.DataFrame()
+    return figures, summaries, variants
 
 
 

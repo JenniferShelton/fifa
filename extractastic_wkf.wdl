@@ -43,10 +43,10 @@ workflow ExtractasticWkf {
         String cpuPlatform = "Intel Cascade Lake"
     }
 
-    call fifaTasks.MobsterFit {
+    call fifaTasks.MobsterFitCommpressed {
         input:
             sampleId = sampleId,
-            vcf = vcf.vcf,
+            vcf = vcf,
             qos = qos,
             partition = partition,
             cpuPlatform = cpuPlatform
@@ -85,14 +85,13 @@ workflow ExtractasticWkf {
             input:
                 vcf = splitVcf
         }
-        call fifaTasks.ExtractionWithMobsterFit {
+        call fifaTasks.ExtractionMobsterFree {
             input:
                 bram = bram,
                 sampleId = sampleId,
                 projectId = projectId,
                 vcf = CompressIndexVcf.vcfCompressedIndexed,
                 referenceFa = referenceFa,
-                mobsterFitRds = MobsterFit.mobsterFitRds,
                 diskSize = diskSize,
                 qos = qos,
                 partition = partition,
@@ -102,12 +101,22 @@ workflow ExtractasticWkf {
 
     call fifaTasks.ConcateTables {
         input:
-            tables = ExtractionWithMobsterFit.extractedFeatures,
+            tables = ExtractionMobsterFree.extractedFeatures,
             outputTablePath = "~{sampleId}_extracted_features.csv"
     }
 
+    call fifaTasks.MergeMobsterFit {
+            input:
+                sampleId = sampleId,
+                extractedFeaturesFifa = ConcateTables.outputTable,
+                fitProbCsv = MobsterFitCommpressed.fitProbCsv,
+                fitProbCsvK2 = MobsterFitCommpressed.fitProbCsvK2
+    }
+
     output {
-        File extractedFeatures = ConcateTables.outputTable
-        File mobsterFitRds = MobsterFit.mobsterFitRds
+        File extractedFeatures = MergeMobsterFit.extractedFeatures
+        File mobsterFitProb = MobsterFitCommpressed.fitProbCsv
+        File mobsterFitProbK2 = MobsterFitCommpressed.fitProbCsvK2
+        File mobsterFitRds = MobsterFitCommpressed.mobsterFitRds
     }
 }

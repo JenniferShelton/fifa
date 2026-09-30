@@ -670,6 +670,11 @@ task MobsterFitCommpressed {
         String sampleId
         IndexedVcf vcf
         String mobsterFitRdsPath = "~{sampleId}.mobster_fit.rds"
+        String fitPngPath = "~{sampleId}.mobster_fit.png"
+        String fitCsvPrefix = "~{sampleId}.mobster_fit"
+        String fitProbCsvPath = "~{sampleId}.mobster_fit.prob.csv"
+        String fitPngK2Path = "~{sampleId}.mobster_fit.k2.png"
+        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.prob.k2.csv"
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
@@ -679,20 +684,36 @@ task MobsterFitCommpressed {
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
-        File mobsterFitScript = "/gpfs/commons/groups/compbio/projects/FFPE_filtering/repos/fifa/src/run_mobster_fit.R"
-    }
+     }
     command <<<
         set -e -o pipefail
 
+        sampleId="~{sampleId}"
+        mobsterFitRds="~{mobsterFitRdsPath}"
+        fitPngPath="~{fitPngPath}"
+        vcf="~{vcf.vcf}"
+        fitCsvPrefix="~{fitCsvPrefix}"
+
         Rscript \
-        ~{mobsterFitScript} \
-        ~{sampleId} \
-        ~{vcf.vcf} \
-        ~{mobsterFitRdsPath}
+        /opt/fifa/src/run_mobster_fit.R \
+        ${sampleId} \
+        ${vcf} \
+        ${mobsterFitRds}
+        
+        # Extract features for the EBM model, reusing a precomputed MOBSTER fit instead of refitting per shard.
+        Rscript /opt/fifa/src/run_fit_print.R \
+            ${sampleId} \
+            ${mobsterFitRds} \
+            ${fitCsvPrefix} \
+            ${fitPngPath}
     >>>
 
     output {
         File mobsterFitRds = mobsterFitRdsPath
+        File fitPng = fitPngPath
+        File fitProbCsv = fitProbCsvPath
+        File fitPngK2 = fitPngK2Path
+        File fitProbCsvK2 = fitProbCsvK2Path
     }
 
     runtime {
@@ -714,6 +735,11 @@ task MobsterFit {
         String sampleId
         File vcf
         String mobsterFitRdsPath = "~{sampleId}.mobster_fit.rds"
+        String fitPngPath = "~{sampleId}.mobster_fit.png"
+        String fitCsvPrefix = "~{sampleId}.mobster_fit"
+        String fitProbCsvPath = "~{sampleId}.mobster_fit.prob.csv"
+        String fitPngK2Path = "~{sampleId}.mobster_fit.k2.png"
+        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.prob.k2.csv"
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
@@ -723,22 +749,36 @@ task MobsterFit {
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
-        File mobsterFitScript = "/gpfs/commons/groups/compbio/projects/FFPE_filtering/repos/fifa/src/run_mobster_fit.R"
     }
     command <<<
         set -e -o pipefail
 
-        # /opt/fifa/src/run_mobster_fit.R \
+        sampleId="~{sampleId}"
+        mobsterFitRds="~{mobsterFitRdsPath}"
+        fitPngPath="~{fitPngPath}"
+        vcf="~{vcf}"
+        fitCsvPrefix="~{fitCsvPrefix}"
 
         Rscript \
-        ~{mobsterFitScript} \
-        ~{sampleId} \
-        ~{vcf} \
-        ~{mobsterFitRdsPath}
+        /opt/fifa/src/run_mobster_fit.R \
+        ${sampleId} \
+        ${vcf} \
+        ${mobsterFitRds}
+        
+        # Extract features for the EBM model, reusing a precomputed MOBSTER fit instead of refitting per shard.
+        Rscript /opt/fifa/src/run_fit_print.R \
+            ${sampleId} \
+            ${mobsterFitRds} \
+            ${fitCsvPrefix} \
+            ${fitPngPath}
     >>>
 
     output {
         File mobsterFitRds = mobsterFitRdsPath
+        File fitPng = fitPngPath
+        File fitProbCsv = fitProbCsvPath
+        File fitPngK2 = fitPngK2Path
+        File fitProbCsvK2 = fitProbCsvK2Path
     }
 
     runtime {
@@ -749,6 +789,110 @@ task MobsterFit {
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:4d619b54f731beec7eb94f9f6b9550463dfd306a4dc681411fb6a585107f5bf8"
         runtime_minutes: "300"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}
+
+task DescribeMobsterFit {
+    input {
+        String sampleId
+        File mobsterFitRds
+        String fitPngPath = "~{sampleId}.mobster_fit.png"
+        String fitCsvPrefix = "~{sampleId}.mobster_fit"
+        String fitProbCsvPath = "~{sampleId}.mobster_fit.prob.csv"
+        String fitPngK2Path = "~{sampleId}.mobster_fit.k2.png"
+        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.prob.k2.csv"
+        # resources
+        Int threads = 1
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 24
+        Int diskSize = 20
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+
+    }
+    command <<<
+        set -e -o pipefail
+        sampleId="~{sampleId}"
+        mobsterFitRds="~{mobsterFitRds}"
+        fitPngPath="~{fitPngPath}"
+        fitCsvPrefix="~{fitCsvPrefix}"
+        
+        # Extract features for the EBM model, reusing a precomputed MOBSTER fit instead of refitting per shard.
+        Rscript /opt/fifa/src/run_fit_print.R \
+            ~{sampleId} \
+            ~{mobsterFitRds} \
+            ~{fitCsvPrefix} \
+            ~{fitPngPath}
+    >>>
+
+    output {
+        File fitPng = fitPngPath
+        File fitProbCsv = fitProbCsvPath
+        File? fitPngK2 = fitPngK2Path
+        File? fitProbCsvK2 = fitProbCsvK2Path
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " LOCAL"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
+        runtime_minutes: "6000"
+        cpuPlatform : cpuPlatform
+        partition: "cpu"
+        qos: qos
+    }
+}
+
+task MergeMobsterFit {
+    input {
+        String sampleId
+        String extractedFeaturesFitCsvPath = "~{sampleId}_extracted_features.csv"
+        File extractedFeaturesFifa
+        File fitProbCsv
+        File fitProbCsvK2
+        # resources
+        Int threads = 1
+        Int runRequestThreads =  ceil(threads / 2.0)
+        Int memoryGb = 24
+        Int diskSize = 20
+        String qos = "compbio"
+        String partition = "cpu"
+        String cpuPlatform = "Intel Cascade Lake"
+
+    }
+    command <<<
+        set -e -o pipefail
+        extractedFeaturesFifa="~{extractedFeaturesFifa}"
+        extractedFeaturesFitCsvPath="~{extractedFeaturesFitCsvPath}"
+        fitProbCsv="~{fitProbCsv}"
+        fitProbCsvK2="~{fitProbCsvK2}"
+        # Extract features for the EBM model, reusing a precomputed MOBSTER fit instead of refitting per shard.
+        Rscript /opt/fifa/src/run_merge_mobster_fit.R \
+            ${fitProbCsv} \
+            ${fitProbCsvK2} \
+            ${extractedFeaturesFifa} \
+            ${extractedFeaturesFitCsvPath}
+    >>>
+
+    output {
+        File extractedFeatures = extractedFeaturesFitCsvPath
+    }
+
+    runtime {
+        mem: memoryGb + "G"
+        cpus: runRequestThreads
+        cpu : threads
+        disks: "local-disk " + diskSize + " LOCAL"
+        memory : memoryGb + "GB"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
+        runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
         qos: qos

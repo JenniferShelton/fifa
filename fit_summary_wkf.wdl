@@ -29,73 +29,12 @@ import "wdl/wdl_structs.wdl"
 import "wdl/fifa.wdl" as fifaTasks
 
 
-
-task DescribeMobsterFit {
-    input {
-        String sampleId
-        File mobsterFitRds
-        String fitPngPath = "~{sampleId}.mobster_fit.png"
-        String fitCsvPath = "~{sampleId}.mobster_fit.csv"
-        String fitProbCsvPath = "~{sampleId}.mobster_fit.prob.csv"
-        String fitPngK2Path = "~{sampleId}.mobster_fit.k2.png"
-        String fitCsvK2Path = "~{sampleId}.mobster_fit.k2.csv"
-        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.prob.k2.csv"
-        File fitPrintRscript = "/gpfs/commons/groups/compbio/projects/FFPE_filtering/repos/fifa/src/run_fit_print.R"
-        # resources
-        Int threads = 1
-        Int runRequestThreads =  ceil(threads / 2.0)
-        Int memoryGb = 24
-        Int diskSize = 20
-        String qos = "compbio"
-        String partition = "cpu"
-        String cpuPlatform = "Intel Cascade Lake"
-
-    }
-    command <<<
-        set -e -o pipefail
-        sampleId="~{sampleId}"
-        mobsterFitRds="~{mobsterFitRds}"
-        fitPngPath="~{fitPngPath}"
-        fitCsvPath="~{fitCsvPath}"
-        
-
-        # Extract features for the EBM model, reusing a precomputed MOBSTER fit instead of refitting per shard.
-        Rscript ~{fitPrintRscript} \
-            ~{sampleId} \
-            ~{mobsterFitRds} \
-            ~{fitCsvPath} \
-            ~{fitPngPath}
-    >>>
-
-    output {
-        File fitCsv = fitCsvPath
-        File fitPng = fitPngPath
-        File fitProbCsv = fitProbCsvPath
-        File? fitPngK2 = fitPngK2Path
-        File? fitCsvK2 = fitCsvK2Path
-        File? fitProbCsvK2 = fitProbCsvK2Path
-    }
-
-    runtime {
-        mem: memoryGb + "G"
-        cpus: runRequestThreads
-        cpu : threads
-        disks: "local-disk " + diskSize + " LOCAL"
-        memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
-        runtime_minutes: "6000"
-        cpuPlatform : cpuPlatform
-        partition: "cpu"
-        qos: qos
-    }
-}
-
-
 workflow FitPrintWkf {
     input {
         String projectId
         Array[String] sampleIds
         Array[IndexedVcf] vcfs
+        Array[File] extractedFeaturesFifas
         # resources
         String qos = "compbio"
         String partition = "cpu"
@@ -111,33 +50,45 @@ workflow FitPrintWkf {
                 partition = partition,
                 cpuPlatform = cpuPlatform
         }
-        call DescribeMobsterFit {
-            input:
-                sampleId = sampleIds[i],
-                mobsterFitRds =  MobsterFitCommpressed.mobsterFitRds,
-                qos = qos,
-                partition = partition,
-                cpuPlatform = cpuPlatform
-        }
+        if (length(extractedFeaturesFifas) > 0) {
+            call fifaTasks.MergeMobsterFit {
+                input:
+                    sampleId = sampleIds[i],
+                    extractedFeaturesFifa = extractedFeaturesFifas[i],
+                    fitProbCsv = MobsterFitCommpressed.fitProbCsv,
+                    fitProbCsvK2 = MobsterFitCommpressed.fitProbCsvK2
+        } 
+    }
+
     }
 
     call fifaTasks.ConcateTables {
         input:
-            tables = DescribeMobsterFit.fitCsv,
-            outputTablePath = "~{projectId}.mobster_fit.csv"
+            tables = MobsterFitCommpressed.fitProbCsv,
+            outputTablePath = "~{projectId}.mobster_fit.prob.csv"
     }
 
-    Array[File] fitPngK2Run = select_all(DescribeMobsterFit.fitPngK2)
-    Array[File] fitCsvK2Run = select_all(DescribeMobsterFit.fitCsvK2)
-    Array[File] fitProbCsvK2Run = select_all(DescribeMobsterFit.fitProbCsvK2)
+    call fifaTasks.ConcateTables as concateTablesK2 {
+        input:
+            tables = MobsterFitCommpressed.fitProbCsvK2,
+            outputTablePath = "~{projectId}.mobster_fit.k2.prob.csv"
+    }
+    if (length(extractedFeaturesFifas) > 0) {
+        Array[File] extractedFeaturesTables = select_all(MergeMobsterFit.extractedFeatures)
+        call fifaTasks.ConcateTables as concateTablesFeatures {
+            input:
+                tables = extractedFeaturesTables,
+                outputTablePath = "~{projectId}_extracted_features.csv"
+        }
+    }
+        
 
     output {
-        File fitCsv = ConcateTables.outputTable
-        Array[File] fitPng = DescribeMobsterFit.fitPng
+        File fitProbCsv = ConcateTables.outputTable
+        File fitProbCsvK2 = concateTablesK2.outputTable
+        File? extractedFeatures = concateTablesFeatures.outputTable
+        Array[File] fitPng = MobsterFitCommpressed.fitPng
+        Array[File] fitPngK2 = MobsterFitCommpressed.fitPngK2
         Array[File] mobsterFitRds = MobsterFitCommpressed.mobsterFitRds
-        Array[File] fitProbCsv = DescribeMobsterFit.fitProbCsv
-        Array[File] fitPngK2 = fitPngK2Run
-        Array[File] fitCsvK2 = fitCsvK2Run
-        Array[File] fitProbCsvK2 = fitProbCsvK2Run
     }
 }
