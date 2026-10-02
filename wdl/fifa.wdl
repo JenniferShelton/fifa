@@ -842,7 +842,7 @@ task DescribeMobsterFit {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:2ff87515d11650ffb104dd134b0a448876b02c32af9c25f5be1ca0db1af79fee"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
@@ -891,7 +891,7 @@ task MergeMobsterFit {
         cpu : threads
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
-        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:98c2f925924537525d1f08224ca6a0cecb253e1defc6f769743310ac7da86bda"
+        docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:2ff87515d11650ffb104dd134b0a448876b02c32af9c25f5be1ca0db1af79fee"
         runtime_minutes: "6000"
         cpuPlatform : cpuPlatform
         partition: "cpu"
