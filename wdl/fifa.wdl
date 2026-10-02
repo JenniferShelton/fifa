@@ -671,10 +671,10 @@ task MobsterFitCommpressed {
         IndexedVcf vcf
         String mobsterFitRdsPath = "~{sampleId}.mobster_fit.rds"
         String fitPngPath = "~{sampleId}.mobster_fit.png"
-        String fitCsvPrefix = "~{sampleId}.mobster_fit"
+        String fitCsvPrefix = "~{sampleId}"
         String fitProbCsvPath = "~{sampleId}.mobster_fit.prob.csv"
         String fitPngK2Path = "~{sampleId}.mobster_fit.k2.png"
-        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.prob.k2.csv"
+        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.k2.prob.csv"
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
@@ -739,7 +739,7 @@ task MobsterFit {
         String fitCsvPrefix = "~{sampleId}.mobster_fit"
         String fitProbCsvPath = "~{sampleId}.mobster_fit.prob.csv"
         String fitPngK2Path = "~{sampleId}.mobster_fit.k2.png"
-        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.prob.k2.csv"
+        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.k2.prob.csv"
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
@@ -803,7 +803,7 @@ task DescribeMobsterFit {
         String fitCsvPrefix = "~{sampleId}.mobster_fit"
         String fitProbCsvPath = "~{sampleId}.mobster_fit.prob.csv"
         String fitPngK2Path = "~{sampleId}.mobster_fit.k2.png"
-        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.prob.k2.csv"
+        String fitProbCsvK2Path = "~{sampleId}.mobster_fit.k2.prob.csv"
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)

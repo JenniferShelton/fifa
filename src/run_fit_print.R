@@ -66,7 +66,19 @@ add_probability_columns <- function(prob_df) {
     prob_df$in_c_lowest_cluster <- as.character(prob_df$cluster) == c_lowest
     prob_df$c_lowest_prob <- prob_df[[c_lowest]]
   }
-
+  # define C_lowest mode (the artifact peak)
+  if (!is.na(c_lowest) && c_lowest %in% names(prob_df)) {
+    c_lowest_density <- normal_density(prob_df[[c_lowest]])
+    c_lowest_max <- if (all(is.na(c_lowest_density))) {
+      NA_real_
+    } else {
+      density_x[which.max(c_lowest_density)]
+    }
+  } else {
+    c_lowest_max <- NA_real_
+  }
+  prob_df$c_lowest_max <- c_lowest_max
+  # define C1 mode
   if ("C1" %in% names(prob_df)) {
     c1_density <- normal_density(prob_df$C1)
     c1_max <- if (all(is.na(c1_density))) {
@@ -98,7 +110,7 @@ fit <- readRDS(fit_path)
 prob_df <- Clusters(fit$best)
 prob_df$sampleId <- sample
 prob_df <- add_probability_columns(prob_df)
-prob_fit_out_path <- paste0(fit_out_prefix, ".mobster_fit.prob.csv")
+prob_fit_out_path <- paste0(fit_out_prefix, ".prob.csv")
 write.csv(prob_df, file = prob_fit_out_path, 
             row.names = FALSE)
 
@@ -123,7 +135,7 @@ if (is.null(df)) {
   prob_df <- Clusters(fit$runs$"2")
   prob_df$sampleId <- sample
   prob_df <- add_probability_columns(prob_df)
-  prob_fit_out_path <- paste0(fit_out_prefix, ".mobster_fit.k2.prob.csv")
+  prob_fit_out_path <- paste0(fit_out_prefix, ".k2.prob.csv")
   write.csv(prob_df, file = prob_fit_out_path, 
             row.names = FALSE)
 }
