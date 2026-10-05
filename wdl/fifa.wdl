@@ -712,8 +712,8 @@ task MobsterFitCommpressed {
         File mobsterFitRds = mobsterFitRdsPath
         File fitPng = fitPngPath
         File fitProbCsv = fitProbCsvPath
-        File fitPngK2 = fitPngK2Path
-        File fitProbCsvK2 = fitProbCsvK2Path
+        File? fitPngK2 = fitPngK2Path
+        File? fitProbCsvK2 = fitProbCsvK2Path
     }
 
     runtime {
@@ -777,8 +777,8 @@ task MobsterFit {
         File mobsterFitRds = mobsterFitRdsPath
         File fitPng = fitPngPath
         File fitProbCsv = fitProbCsvPath
-        File fitPngK2 = fitPngK2Path
-        File fitProbCsvK2 = fitProbCsvK2Path
+        File? fitPngK2 = fitPngK2Path
+        File? fitProbCsvK2 = fitProbCsvK2Path
     }
 
     runtime {
@@ -874,7 +874,7 @@ task MergeMobsterFit {
         fitProbCsv="~{fitProbCsv}"
         fitProbCsvK2="~{fitProbCsvK2}"
         # Extract features for the EBM model, reusing a precomputed MOBSTER fit instead of refitting per shard.
-        Rscript /opt/fifa/src/run_merge_mobster_fit.R \
+        Rscript /opt/fifa/src/merge_fit_print.R \
             ${fitProbCsv} \
             ${fitProbCsvK2} \
             ${extractedFeaturesFifa} \

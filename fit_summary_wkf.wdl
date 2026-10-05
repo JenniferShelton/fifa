@@ -51,12 +51,18 @@ workflow FitPrintWkf {
                 cpuPlatform = cpuPlatform
         }
         if (length(extractedFeaturesFifas) > 0) {
+            if (defined(MobsterFitCommpressed.fitProbCsvK2)) {
+                File fitProbCsvK2Merge = select_first([MobsterFitCommpressed.fitProbCsvK2])
+            }
+            if (!defined(MobsterFitCommpressed.fitProbCsvK2)) {
+                File fitProbCsvNoK2Merge = MobsterFitCommpressed.fitProbCsv
+            }
             call fifaTasks.MergeMobsterFit {
                 input:
                     sampleId = sampleIds[i],
                     extractedFeaturesFifa = extractedFeaturesFifas[i],
                     fitProbCsv = MobsterFitCommpressed.fitProbCsv,
-                    fitProbCsvK2 = MobsterFitCommpressed.fitProbCsvK2
+                    fitProbCsvK2 = select_first([fitProbCsvK2Merge, fitProbCsvNoK2Merge])
         } 
     }
 
@@ -67,10 +73,10 @@ workflow FitPrintWkf {
             tables = MobsterFitCommpressed.fitProbCsv,
             outputTablePath = "~{projectId}.mobster_fit.prob.csv"
     }
-
+    Array[File] fitProbCsvK2Run = select_all(MobsterFitCommpressed.fitProbCsvK2)
     call fifaTasks.ConcateTables as concateTablesK2 {
         input:
-            tables = MobsterFitCommpressed.fitProbCsvK2,
+            tables = fitProbCsvK2Run,
             outputTablePath = "~{projectId}.mobster_fit.k2.prob.csv"
     }
     if (length(extractedFeaturesFifas) > 0) {
@@ -82,13 +88,13 @@ workflow FitPrintWkf {
         }
     }
         
-
+    Array[File] fitPngK2Run = select_all(MobsterFitCommpressed.fitPngK2)
     output {
         File fitProbCsv = ConcateTables.outputTable
         File fitProbCsvK2 = concateTablesK2.outputTable
         File? extractedFeatures = concateTablesFeatures.outputTable
         Array[File] fitPng = MobsterFitCommpressed.fitPng
-        Array[File] fitPngK2 = MobsterFitCommpressed.fitPngK2
+        Array[File] fitPngK2 = fitPngK2Run
         Array[File] mobsterFitRds = MobsterFitCommpressed.mobsterFitRds
     }
 }
