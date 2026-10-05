@@ -104,19 +104,24 @@ workflow ExtractasticWkf {
             tables = ExtractionMobsterFree.extractedFeatures,
             outputTablePath = "~{sampleId}_extracted_features.csv"
     }
-
+    if (defined(MobsterFitCommpressed.fitProbCsvK2)) {
+        File fitProbCsvK2Merge = select_first([MobsterFitCommpressed.fitProbCsvK2])
+    }
+    if (!defined(MobsterFitCommpressed.fitProbCsvK2)) {
+        File fitProbCsvNoK2Merge = MobsterFitCommpressed.fitProbCsv
+    }
     call fifaTasks.MergeMobsterFit {
             input:
                 sampleId = sampleId,
                 extractedFeaturesFifa = ConcateTables.outputTable,
                 fitProbCsv = MobsterFitCommpressed.fitProbCsv,
-                fitProbCsvK2 = MobsterFitCommpressed.fitProbCsvK2
+                fitProbCsvK2 = select_first([fitProbCsvK2Merge, fitProbCsvNoK2Merge])
     }
 
     output {
         File extractedFeatures = MergeMobsterFit.extractedFeatures
         File mobsterFitProb = MobsterFitCommpressed.fitProbCsv
-        File mobsterFitProbK2 = MobsterFitCommpressed.fitProbCsvK2
+        File mobsterFitProbK2 = select_first([fitProbCsvK2Merge, fitProbCsvNoK2Merge])
         File mobsterFitRds = MobsterFitCommpressed.mobsterFitRds
     }
 }
