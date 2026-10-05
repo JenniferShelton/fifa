@@ -71,12 +71,14 @@ workflow FitPrintWkf {
     call fifaTasks.ConcateTables {
         input:
             tables = MobsterFitCommpressed.fitProbCsv,
+            memoryGb = 64,
             outputTablePath = "~{projectId}.mobster_fit.prob.csv"
     }
     Array[File] fitProbCsvK2Run = select_all(MobsterFitCommpressed.fitProbCsvK2)
     call fifaTasks.ConcateTables as concateTablesK2 {
         input:
             tables = fitProbCsvK2Run,
+            memoryGb = 64,
             outputTablePath = "~{projectId}.mobster_fit.k2.prob.csv"
     }
     if (length(extractedFeaturesFifas) > 0) {
@@ -84,6 +86,7 @@ workflow FitPrintWkf {
         call fifaTasks.ConcateTables as concateTablesFeatures {
             input:
                 tables = extractedFeaturesTables,
+                memoryGb = 64,
                 outputTablePath = "~{projectId}_extracted_features.csv"
         }
     }
