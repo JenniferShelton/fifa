@@ -17,7 +17,12 @@ import re
 import pysam
 import csv
 from process_bam_file import get_column_idx
-from helper_funcs import convert_hot_encodings, scale_features
+from helper_funcs import (
+    align_model_features,
+    convert_hot_encodings,
+    scale_features,
+    select_model_features,
+)
 import logging
 import traceback
 
@@ -55,9 +60,7 @@ def make_predictions(ebm, variants):
 
     del variants 
 
-    if not (set(ebm.feature_names_in_).issubset(set(X_test.columns))):
-        print("Warning: Feature mismatch between model and test data. Please check input features.")
-        sys.exit(1)
+    X_test = select_model_features(ebm.feature_names_in_, X_test)
 
     y_pred = pd.DataFrame(ebm.predict(X_test), columns=['Predicted'])
     y_probs = pd.DataFrame(ebm.predict_proba(X_test)[:, 1], columns=['Probability'])
@@ -137,7 +140,10 @@ def get_zero_score_names(models):
     return zero_score_names
 
 def remove_zero_score_terms_by_name(model, zero_score_names):
-    return model.remove_terms(zero_score_names)
+    terms_to_remove = sorted(set(zero_score_names).intersection(model.term_names_))
+    if not terms_to_remove:
+        return model
+    return model.remove_terms(terms_to_remove)
 
 
 def load_models(model_files):
@@ -169,14 +175,14 @@ def load_models(model_files):
         else:
             model = pickle.load(open(model_path, 'rb'))
             models.append(model)
+    reference_feature_names = list(models[0].feature_names_in_)
+    for model_path, model in zip(model_files, models):
+        align_model_features(
+            model, reference_feature_names, model_label=model_path
+        )
+
     zero_score_names = get_zero_score_names(models)
     models = [remove_zero_score_terms_by_name(model, zero_score_names) for model in models]
-    for model in models:
-        model_feature_index = {name: i for i, name in enumerate(model.feature_names_in_)}
-        reorder_indices = [model_feature_index[name] for name in models[0].feature_names_in_]
-        model.feature_names_in_ = [model.feature_names_in_[i] for i in reorder_indices]
-        model.term_names_ = [model.term_names_[i] for i in reorder_indices]
-        model.feature_types_in_ = [model.feature_types_in_[i] for i in reorder_indices] 
     if len(models) > 1:
         merged_model = merge_ebms(models)
         return merged_model

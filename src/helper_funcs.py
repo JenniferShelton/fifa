@@ -8,10 +8,83 @@ from json import dump
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 import sys
 import glob
+from typing import Any, Sequence
 from metrics_dictionary import to_pyrimidine_context
 
 ## A random assortment of helper functions
 ## So that I'm not repeating code
+
+def align_model_features(
+    model: Any,
+    reference_feature_names: Sequence[str],
+    model_label: str = "model",
+) -> Any:
+    model_feature_names = list(model.feature_names_in_)
+    reference_feature_names = list(reference_feature_names)
+    if len(set(model_feature_names)) != len(model_feature_names):
+        raise ValueError(f"{model_label} has duplicate feature names.")
+    if len(set(reference_feature_names)) != len(reference_feature_names):
+        raise ValueError("The first model has duplicate feature names.")
+
+    reference_set = set(reference_feature_names)
+    model_set = set(model_feature_names)
+    if model_set != reference_set:
+        missing = sorted(reference_set - model_set)
+        extra = sorted(model_set - reference_set)
+        raise ValueError(
+            f"Cannot merge {model_label}: feature names differ from the first "
+            f"model. Missing: {missing}; extra: {extra}."
+        )
+
+    name_to_index = {
+        feature_name: index
+        for index, feature_name in enumerate(model_feature_names)
+    }
+    reorder_indices = [
+        name_to_index[feature_name] for feature_name in reference_feature_names
+    ]
+    old_to_new_index = {
+        old_index: new_index
+        for new_index, old_index in enumerate(reorder_indices)
+    }
+
+    for attribute in (
+        "bins_",
+        "feature_types_in_",
+        "histogram_edges_",
+        "histogram_weights_",
+    ):
+        values = getattr(model, attribute, None)
+        if values is not None:
+            setattr(model, attribute, [values[index] for index in reorder_indices])
+
+    for attribute in ("feature_bounds_", "unique_val_counts_"):
+        values = getattr(model, attribute, None)
+        if values is not None:
+            setattr(model, attribute, values[reorder_indices])
+
+    model.feature_names_in_ = reference_feature_names
+    model.term_features_ = [
+        tuple(old_to_new_index[index] for index in term_features)
+        for term_features in model.term_features_
+    ]
+    model.term_names_ = [
+        " & ".join(model.feature_names_in_[index] for index in term_features)
+        for term_features in model.term_features_
+    ]
+    return model
+
+
+def select_model_features(
+    model_feature_names: Sequence[str], variants: pd.DataFrame
+) -> pd.DataFrame:
+    missing = sorted(set(model_feature_names) - set(variants.columns))
+    if missing:
+        raise ValueError(
+            "Prediction input is missing model-required feature(s): "
+            f"{missing}"
+        )
+    return variants.loc[:, model_feature_names]
 
 #Convert hot encodings to seq context features
 def convert_hot_encodings(variants):

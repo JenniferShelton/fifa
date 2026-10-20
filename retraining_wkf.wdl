@@ -32,31 +32,17 @@ import "wdl/fifa.wdl" as fifa
 
 workflow RetrainingWkfs {
     input {
-        Array[Bram] brams
-        Array[String] sampleIds
         String projectId
-        Array[IndexedVcf] vcfs
         IndexedReference referenceFa
         File labels
-        String modelPath = "fifa_model.pkl"
-        Boolean hyperParameter = false
+        Array[File] extractedFeatures
+        String modelPath = "~{projectId}.fifa_model.pkl"
+        Boolean hyperParameter = true
+        Int memoryGb = 48
         # resources
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
-    }
-    scatter (i in range(length(brams))) {
-        call retrainingExtract.RetrainingExtractWkf {
-            input:
-                bram = brams[i],
-                sampleId = sampleIds[i],
-                projectId = projectId,
-                vcf = vcfs[i],
-                referenceFa = referenceFa,
-                qos = qos,
-                partition = partition,
-                cpuPlatform = cpuPlatform
-        }
     }
     if (hyperParameter) {
         String hyperParameterFlagTrue = " --hyperparameter"
@@ -64,13 +50,13 @@ workflow RetrainingWkfs {
     String hyperParameterFlag = select_first([hyperParameterFlagTrue, ""])
     call fifa.ReTraining {
         input:
-            extractedFeatures = RetrainingExtractWkf.extractedFeatures,
+            extractedFeatures = extractedFeatures,
             labels = labels,
             modelPath = modelPath,
-            hyperParameterFlag = hyperParameterFlag
+            hyperParameterFlag = hyperParameterFlag,
+            memoryGb = memoryGb
     }
     output {
-        Array[File] extractedFeatures = RetrainingExtractWkf.extractedFeatures
         File model = ReTraining.model
     }
 }

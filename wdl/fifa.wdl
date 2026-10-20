@@ -1136,7 +1136,7 @@ task ReTraining {
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
-        Int memoryGb = 4
+        Int memoryGb = 48
         Int diskSize = 20
         String qos = "compbio"
         String partition = "cpu"
@@ -1171,7 +1171,7 @@ task ReTraining {
         disks: "local-disk " + diskSize + " LOCAL"
         memory : memoryGb + "GB"
         docker : "us.gcr.io/nygc-comp-s-fd4e/fifa@sha256:66b88c266fc1ad78a98ace3dd4703f35ecb21fc27b77f3a6c01c31a750ae3791"
-        runtime_minutes: "300"
+        runtime_minutes: "6000"
         partition: "cpu"
         cpuPlatform : cpuPlatform
         qos: qos

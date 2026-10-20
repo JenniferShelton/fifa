@@ -14,7 +14,7 @@ import pandas as pd
 
 
 
-REQUIRED_COLUMNS = {"sampleId", "VAF", "new_truth", "cluster"}
+REQUIRED_COLUMNS = {"VAF", "new_truth"}
 METRIC_NAMES = ["sensitivity", "specificity", "precision", "recall"]
 
 
@@ -64,6 +64,24 @@ def plot_metric_comparison(
         linewidth=2,
         label="VafCutOffClassification vs Truth",
     )
+    # Classification_5.0
+    ax.plot(
+        x,
+        metrics["Classification_5.0"],
+        marker="o",
+        color="green",
+        linewidth=2,
+        label="Classification_5.0 vs Truth",
+    )
+    # Classification_2.0
+    ax.plot(
+        x,
+        metrics["Classification_2.0"],
+        marker="o",
+        color="black",
+        linewidth=2,
+        label="Classification_2.0 vs Truth",
+    )
     ax.set_xticks(x, METRIC_NAMES)
     ax.set_ylim(0, 1)
     ax.set_ylabel("Score")
@@ -86,21 +104,21 @@ def evaluate_dataframe(
     plot_file: Optional[Union[str, Path]] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, plt.Figure]:
     """Add classifications, calculate metrics, and optionally write outputs."""
+    dataframe["VAF"] = dataframe["tumor_VAF"].copy()
+    dataframe = dataframe[(dataframe["new_truth"].notna())].copy()
     missing_columns = REQUIRED_COLUMNS.difference(dataframe.columns)
     if missing_columns:
         missing = ", ".join(sorted(missing_columns))
         raise ValueError(f"CSV is missing required columns: {missing}")
-
-    dataframe = dataframe.copy()
     dataframe["VAF"] = pd.to_numeric(dataframe["VAF"], errors="coerce")
     if dataframe["VAF"].isna().any():
         raise ValueError("CSV contains missing or non-numeric VAF values")
-
     dataframe["VafCutOffClassification"] = np.where(
         dataframe["VAF"] < 0.1,
         "Artifact",
         "Real",
     )
+
 
     truth_map = {"Real": "Real", "Artifact": "Artifact", "Switch": "Artifact"}
     # print(dataframe[(dataframe["new_truth"].isna())].shape)
@@ -111,10 +129,20 @@ def evaluate_dataframe(
         unknown_truth = sorted(dataframe.loc[dataframe["Truth"].isna(), "new_truth"].unique())
         raise ValueError(f"Unsupported new_truth values: {unknown_truth}")
 
-    dataframe["lowest_clone_id"] = dataframe["c_lowest_name"].copy()
-
     dataframe["Classification"] = np.where(
-        dataframe["cluster"].eq(dataframe["lowest_clone_id"]),
+        dataframe["in_c_lowest_cluster"].eq(True),
+        "Artifact",
+        "Real",
+    )
+
+    dataframe["Classification_5.0"] = np.where(
+        (dataframe["c_lowest_prob"] > 0.5),
+        "Artifact",
+        "Real",
+    )
+
+    dataframe["Classification_2.0"] = np.where(
+        (dataframe["c_lowest_prob"] > 0.2),
         "Artifact",
         "Real",
     )
@@ -130,6 +158,8 @@ def evaluate_dataframe(
             "metric": METRIC_NAMES,
             "Classification": [classification_metrics[name] for name in METRIC_NAMES],
             "VafCutOffClassification": [vaf_metrics[name] for name in METRIC_NAMES],
+            "Classification_5.0": [ _calculate_metrics(dataframe["Classification_5.0"], dataframe["Truth"])[name] for name in METRIC_NAMES],
+            "Classification_2.0": [ _calculate_metrics(dataframe["Classification_2.0"], dataframe["Truth"])[name] for name in METRIC_NAMES],
         }
     )
 

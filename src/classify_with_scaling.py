@@ -38,7 +38,11 @@ import re
 import pysam
 import csv
 from process_bam_file import get_column_idx
-from helper_funcs import convert_hot_encodings, scale_features
+from helper_funcs import (
+    convert_hot_encodings,
+    scale_features,
+    select_model_features,
+)
 import logging
 
 global logger
@@ -74,9 +78,7 @@ def make_predictions(ebm, variants):
     X_test = variants.drop(['Sample', 'Variant', 'Cohort'], axis=1)
     del variants 
 
-    if not (set(ebm.feature_names_in_).issubset(set(X_test.columns))):
-        print("Warning: Feature mismatch between model and test data. Please check input features.")
-        sys.exit(1)
+    X_test = select_model_features(ebm.feature_names_in_, X_test)
 
     y_pred = pd.DataFrame(ebm.predict(X_test), columns=['Predicted'])
     y_probs = pd.DataFrame(ebm.predict_proba(X_test)[:, 1], columns=['Probability'])

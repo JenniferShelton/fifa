@@ -36,6 +36,7 @@ workflow RetrainingExtractWkf {
         String projectId
         IndexedVcf vcf
         IndexedReference referenceFa
+        Int memoryGb = 48
         # resources
         String qos = "compbio"
         String partition = "cpu"
@@ -50,6 +51,7 @@ workflow RetrainingExtractWkf {
             vcf = vcf,
             referenceFa = referenceFa,
             diskSize = diskSize,
+            memoryGb = memoryGb,
             qos = qos,
             partition = partition,
             cpuPlatform = cpuPlatform
