@@ -208,7 +208,8 @@ def create_training_splits(
             chunk_directory / f"{project_name}.{chunk_name}_extracted_features.csv"
         )
         chunk_labels_path = chunk_directory / f"{project_name}.{chunk_name}_labels.csv"
-        features.loc[sample_mask].to_csv(chunk_features_path, index=False)
+        drops = 'CHROM,POS,REF,ALT,FIFA_LABEL,FIFA_PROB,VAF,variant,new_truth,Tail'.split(',')
+        features.loc[sample_mask].drop(columns=drops, errors='ignore').to_csv(chunk_features_path, index=False)
         labels.loc[sample_mask].to_csv(chunk_labels_path, index=False)
         generated_chunks.append((chunk_name, chunk_features_path, chunk_labels_path))
 
