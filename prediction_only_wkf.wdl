@@ -44,6 +44,7 @@ workflow PredictionWkfs {
         String cpuPlatform = "Intel Cascade Lake"
     }
     Array[File] rnaFiles = select_first([optionalRnaFiles, []])
+    
     scatter (i in range(length(vcfs))) {
         if (defined(optionalRnaFiles)) {
             call predictionSubWkf.PredictionWkf as rnaPredictionWkfWkf {

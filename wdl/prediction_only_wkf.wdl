@@ -43,29 +43,77 @@ workflow PredictionWkf {
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
+        Int maxSplits = 5
+        Int minSplits = 2
     }
-    if (defined(optionalRnaFile)) {
-        call fifa.PredictionWithRna {
+     gather split VCF filenames to avoid glob that can fail on prem
+    Int count = 100
+    scatter (i in range(count + 1)) {
+        Int num = i + 1
+        String suffixes = "${num}"
+    }
+    String prefix = "~{sampleId}.fifa."
+    String additionalSuffix = ".vcf"
+    scatter (index in range(length(suffixes))) {
+        String suffix = suffixes[index]
+        String splitVcfPaths = "~{prefix}.~{suffix}~{additionalSuffix}"
+    }
+    call fifa.SplitVcf {
+        input:
+            vcf = vcf.vcf,
+            prefix = prefix,
+            diskSize = (ceil(size(vcf.vcf, "GB")) * 3) + 10,
+            maxRows = 1000,
+            minSplits = minSplits,
+            maxSplits = maxSplits,
+            splitVcfPaths = splitVcfPaths
+    }
+    Array[File] splitVcfs = select_all(SplitVcf.splitVcfs)
+    scatter(splitVcf in splitVcfs) {
+        call fifa.ReorderVcfColumns {
             input:
-                sampleId = sampleId,
-                vcf = vcf,
-                extractedFeatures = extractedFeatures,
-                models = models,
-                optionalRnaFile = optionalRnaFile
+                tumor = tumorId,
+                normal = normalId,
+                rawVcf = splitVcf,
+                orderedVcfPath = "~{sampleId}.renamedColumns.vcf",
+                memoryGb = 4,
+                diskSize = 10
         }
-    }
 
-    if (!defined(optionalRnaFile)) {
-        call fifa.Prediction {
+        call fifa.CompressIndexVcf {
             input:
-                sampleId = sampleId,
-                vcf = vcf,
-                extractedFeatures = extractedFeatures,
-                models = models
+                vcf = ReorderVcfColumns.orderedVcf,
+                memoryGb = 1
         }
+        if (defined(optionalRnaFile)) {
+            call fifa.PredictionWithRna {
+                input:
+                    sampleId = sampleId,
+                    vcf = CompressIndexVcf.vcfCompressedIndexed,
+                    extractedFeatures = extractedFeatures,
+                    models = models,
+                    optionalRnaFile = optionalRnaFile
+            }
+        }
+
+        if (!defined(optionalRnaFile)) {
+            call fifa.Prediction {
+                input:
+                    sampleId = sampleId,
+                    vcf = CompressIndexVcf.vcfCompressedIndexed,
+                    extractedFeatures = extractedFeatures,
+                    models = models
+            }
+        }
+        File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])
     }
-    File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])
+    call fifa.Gatk4MergeSortVcf {
+        input:
+            tempVcfs = fifaVcfRun,
+            referenceFa = referenceFa,
+            sortedVcfPath = "~{sampleId}.fifa.vcf"
+    }
     output {
-        File fifaVcf = fifaVcfRun
+        File fifaVcf = Gatk4MergeSortVcf.sortedVcf
     }
 }

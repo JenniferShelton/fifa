@@ -3,6 +3,7 @@
 import os 
 import logging
 import argparse as ap
+import sys
 from process_bam_file import process_bam_file as regular_process_bam_file
 from parallelizing_bam_metrics import process_bam_file as parallel_process_bam_file
 import train_new_ebm
@@ -130,6 +131,10 @@ if __name__ == '__main__':
         else:
             predict(extracted_features_paths=args.features_path, outpath=args.output_dir, 
                     ebm=ebm, vcf_path=args.vcffile)
+        logging.shutdown()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
     elif args.subcommand == 'merge':
         logger.info('Merging multiple EBM models')
         merge_ebms(args.input_models, args.output_path)

@@ -988,7 +988,7 @@ task Prediction {
         String fifaVcfPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.vcf")
         Array[File] models
         # resources
-        Int threads = 4
+        Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
         Int memoryGb = 48
         Int diskSize = 20

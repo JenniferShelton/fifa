@@ -50,6 +50,15 @@ global predictions_path
 
 np.random.seed(42)
 
+
+def normalize_variant_key(variant_key: str) -> str:
+    """Normalize a variant key to CHROM:POS_REF>ALT separators."""
+    parts = re.split(r'[:_>]', str(variant_key).strip())
+    if len(parts) != 4:
+        return str(variant_key).strip()
+    return f'{parts[0]}:{parts[1]}_{parts[2]}>{parts[3]}'
+
+
 def make_predictions(ebm, variants):
     """
     Scale features, and make predictions on the variants. 
@@ -106,12 +115,24 @@ def generate_output_vcf_file(predictions, vcf_path):
     origvcf.header.info.add("FIFA_PROB", "1", "Float", "FIFA - Probability of Variant being Real, based on FIFA's Classification")
     vcf_out = pysam.VariantFile(outpath, 'w', header=origvcf.header)
     
-    prediction_dict = dict(zip(predictions['Variant'], predictions['Predicted']))
-    probability_dict = dict(zip(predictions['Variant'], predictions['Probability']))
+    prediction_dict = dict(
+        zip(
+            predictions['Variant'].map(normalize_variant_key),
+            predictions['Predicted'],
+        )
+    )
+    probability_dict = dict(
+        zip(
+            predictions['Variant'].map(normalize_variant_key),
+            predictions['Probability'],
+        )
+    )
     positions = set()
 
     for variant in origvcf:
-        position = f"{variant.chrom}:{variant.pos}_{variant.ref}>{variant.alts[0]}"
+        position = normalize_variant_key(
+            f"{variant.chrom}:{variant.pos}_{variant.ref}>{variant.alts[0]}"
+        )
         
         if position in positions:
             print(f"Duplicate entry found for: {position}")
@@ -127,6 +148,8 @@ def generate_output_vcf_file(predictions, vcf_path):
         
         vcf_out.write(variant)
 
+    vcf_out.close()
+    origvcf.close()
     logger.info(f"Successfully generated: {outpath}")
 
 def parse_pairs_path(pairs_path, combined_df): 
