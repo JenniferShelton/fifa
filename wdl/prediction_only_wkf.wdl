@@ -94,6 +94,7 @@ workflow PredictionWkf {
                     sampleId = sampleId,
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     extractedFeatures = extractedFeatures,
+                    fifaCsvPath = "~{pairId}.fifa.csv",
                     models = models,
                     optionalRnaFile = optionalRnaFile
             }
@@ -105,10 +106,12 @@ workflow PredictionWkf {
                     sampleId = sampleId,
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     extractedFeatures = extractedFeatures,
+                    fifaCsvPath = "~{pairId}.fifa.csv",
                     models = models
             }
         }
         File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])
+        File fifaCsvRun = select_first([PredictionWithRna.fifaCsv, Prediction.fifaCsv])
     }
     call fifa.Gatk4MergeSortVcf {
         input:
@@ -118,5 +121,6 @@ workflow PredictionWkf {
     }
     output {
         File fifaVcf = Gatk4MergeSortVcf.sortedVcf.vcf
+        File fifaCsv = fifaCsvRun[0]
     }
 }

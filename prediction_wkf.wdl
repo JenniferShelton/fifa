@@ -76,9 +76,11 @@ workflow PredictionWkfs {
         }
         File extractedFeaturesRun = select_first([rnaPredictionWkfWkf.extractedFeatures, PredictionWkf.extractedFeatures])
         File fifaVcfRun = select_first([rnaPredictionWkfWkf.fifaVcf, PredictionWkf.fifaVcf])
+        File fifaCsvRun = select_first([rnaPredictionWkfWkf.fifaCsv, PredictionWkf.fifaCsv])
     }
     output {
         Array[File] extractedFeatures = extractedFeaturesRun
         Array[File] fifaVcf = fifaVcfRun
+        Array[File] fifaCsv = fifaCsvRun
     }
 }

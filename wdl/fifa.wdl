@@ -985,6 +985,8 @@ task Prediction {
         IndexedVcf vcf
         File extractedFeatures
         String fifaVcfPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.vcf")
+        String fifaCsvPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.csv")
+        String generatedFifaCsvPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.csv")
         Array[File] models
         # resources
         Int threads = 1
@@ -1009,10 +1011,14 @@ task Prediction {
             -f ${extractedFeatures} \
             -o . \
             -m ${all_models}
+        if [ "~{generatedFifaCsvPath}" != "~{fifaCsvPath}" ]; then
+            mv "~{generatedFifaCsvPath}" "~{fifaCsvPath}"
+        fi
     >>>
 
     output {
         File fifaVcf= fifaVcfPath
+        File fifaCsv = fifaCsvPath
     }
 
     runtime {
@@ -1035,6 +1041,8 @@ task PredictionWithRna {
         IndexedVcf vcf
         File extractedFeatures
         String fifaVcfPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.vcf")
+        String fifaCsvPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.csv")
+        String generatedFifaCsvPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.csv")
         Array[File] models
         File? optionalRnaFile
         # resources
@@ -1062,10 +1070,14 @@ task PredictionWithRna {
             -o . \
             -m ${all_models} \
             -r ${all_rna}
+        if [ "~{generatedFifaCsvPath}" != "~{fifaCsvPath}" ]; then
+            mv "~{generatedFifaCsvPath}" "~{fifaCsvPath}"
+        fi
     >>>
 
     output {
         File fifaVcf= fifaVcfPath
+        File fifaCsv = fifaCsvPath
     }
 
     runtime {

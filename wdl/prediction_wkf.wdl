@@ -98,8 +98,10 @@ workflow PredictionWkf {
         }
     }
     File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])
+    File fifaCsvRun = select_first([PredictionWithRna.fifaCsv, Prediction.fifaCsv])
     output {
         File extractedFeatures = extractedFeaturesRun
         File fifaVcf = fifaVcfRun
+        File fifaCsv = fifaCsvRun
     }
 }
