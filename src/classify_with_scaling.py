@@ -44,6 +44,7 @@ from helper_funcs import (
     select_model_features,
 )
 import logging
+from typing import Any, List, Set
 
 global logger
 global predictions_path
@@ -163,7 +164,7 @@ def parse_pairs_path(pairs_path, combined_df):
             predictions = combined_df[combined_df['Sample'] == sample]
             generate_output_vcf_file(predictions, vcf_path)
 
-def get_zero_score_names(models):
+def get_zero_score_names(models: List[Any]) -> Set[str]:
     # Accesory function to identify non-contributory features across multiple EBM models
     # These features need to be removed to make models compatible for merging 
     zero_score_names = set()

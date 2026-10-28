@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, precision_score, f1_score, recall_score
-from interpret.glassbox import ExplainableBoostingClassifier
 import multiprocessing as mp
 from multiprocessing import Pool
 from json import dump
@@ -15,66 +14,58 @@ from scipy.stats import trim_mean
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 import sys
 import glob
-import re
 import logging
-from interpret.glassbox import merge_ebms
+from typing import Any, List, Optional
+
+from interpret.glassbox import merge_ebms as interpret_merge_ebms
 from classify_with_scaling import get_zero_score_names, remove_zero_score_terms_by_name # in future can move these functions to a utils file
-from helper_funcs import convert_hot_encodings, scale_features
+from helper_funcs import align_model_features, convert_hot_encodings, scale_features
 
 np.random.seed(42)
 label_encoder = LabelEncoder() 
 logger = logging.getLogger(__name__)
 
-def merge_ebms(input_models, output_path=None):
-    ebm = ExplainableBoostingClassifier()
-    if isinstance(input_models, list):
-        models = []
-        for i, model_path in enumerate(input_models):
-            fifa_install_dir=os.path.dirname(os.getcwd())
-            if model_path == "NYGC1":
-                path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC1.pkl')
-                with open(path, 'rb') as file:
-                    model = pickle.load(file)
-                models.append(model)
-            elif model_path == "NYGC2":
-                path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_NYGC2.pkl')
-                with open(path, 'rb') as file:
-                    model = pickle.load(file)
-                models.append(model)
-            elif re.match(r'^(?:CGCI-)?BLGSP$', model_path):
-                path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-BLGSP.pkl')
-                with open(path, 'rb') as file:
-                    model = pickle.load(file)
-                models.append(model)
-            elif re.match(r'^(?:CGCI-)?HTMCP$', model_path):
-                path= os.path.join(fifa_install_dir, 'models/ebm_hyperparams_CGCI-HTMCP.pkl')
-                with open(path, 'rb') as file:
-                    model = pickle.load(file)
-                models.append(model)
-            elif not os.path.isfile(model_path):
-                raise FileNotFoundError(f"Model file {model_path} does not exist.")
-            else:
-                model = pickle.load(open(model_path, 'rb'))
-                models.append(model)
-    
-        if models.is_empty():
-            raise ValueError("No models were loaded. Please check the input model paths.")
+def merge_ebms(
+    input_models: List[str], output_path: Optional[str] = None
+) -> Any:
+    if not input_models:
+        raise ValueError("At least one model path must be provided.")
 
+    fifa_install_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bundled_models = {
+        "NYGC1": "ebm_hyperparams_NYGC1.pkl",
+        "NYGC2": "ebm_hyperparams_NYGC2.pkl",
+        "BLGSP": "ebm_hyperparams_CGCI-BLGSP.pkl",
+        "CGCI-BLGSP": "ebm_hyperparams_CGCI-BLGSP.pkl",
+        "HTMCP": "ebm_hyperparams_CGCI-HTMCP.pkl",
+        "CGCI-HTMCP": "ebm_hyperparams_CGCI-HTMCP.pkl",
+    }
+    models: List[Any] = []
+    for model_path in input_models:
+        filename = bundled_models.get(model_path)
+        path = (
+            os.path.join(fifa_install_dir, "models", filename)
+            if filename
+            else model_path
+        )
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Model file {path} does not exist.")
+        with open(path, "rb") as model_file:
+            models.append(pickle.load(model_file))
+
+    reference_feature_names = list(models[0].feature_names_in_)
+    for model_path, model in zip(input_models, models):
+        align_model_features(model, reference_feature_names, model_label=model_path)
+
+    if len(models) > 1:
         zero_score_names = get_zero_score_names(models)
-
-        if len(models) > 1:
-            for model in models:
-                model = remove_zero_score_terms_by_name(model, zero_score_names)
-                model_feature_index = {name: i for i, name in enumerate(model.feature_names_in_)}
-                reorder_indices = [model_feature_index[name] for name in models[0].feature_names_in_]
-                model.feature_names_in_ = [model.feature_names_in_[i] for i in reorder_indices]
-                model.term_names_ = [model.term_names_[i] for i in reorder_indices]
-                model.feature_types_in_ = [model.feature_types_in_[i] for i in reorder_indices] 
-
-            ebm =  merge_ebms(models)
-    elif os.path.isfile(input_models):
-        with open(input_models, 'rb') as f:
-            ebm = pickle.load(f)
+        models = [
+            remove_zero_score_terms_by_name(model, zero_score_names)
+            for model in models
+        ]
+        ebm = interpret_merge_ebms(models)
+    else:
+        ebm = models[0]
 
     if output_path: 
         logger.info(f'Output path provided; Merged model saved to: {output_path}')

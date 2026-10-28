@@ -14,6 +14,7 @@ from scipy.stats import trim_mean
 import sys
 import glob
 import re
+from typing import Any, List, Set
 import pysam
 import csv
 from process_bam_file import get_column_idx
@@ -128,7 +129,7 @@ def generate_output_vcf_file_rna(predictions, rna_annotations, vcf_path):
 ## In the future, this code should be factored out from recover_annotations.py and 
 ## classify_with_scaling.py
 
-def get_zero_score_names(models):
+def get_zero_score_names(models: List[Any]) -> Set[str]:
     # Accesory function to identify non-contributory features across multiple EBM models
     # These features need to be removed to make models compatible for merging 
     zero_score_names = set()
@@ -146,8 +147,8 @@ def remove_zero_score_terms_by_name(model, zero_score_names):
     return model.remove_terms(terms_to_remove)
 
 
-def load_models(model_files):
-    models = []
+def load_models(model_files: List[str]) -> Any:
+    models: List[Any] = []
     for i, model_path in enumerate(model_files):
         fifa_install_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if model_path == "NYGC1":
