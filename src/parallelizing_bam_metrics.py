@@ -698,6 +698,9 @@ def get_mobster_tail_scores(sample, vcf_path, out_path, mobster_fit_rds=None):
 def extract_all_features(bam_path, vcf_path, ref_seq, sample, cohort, label, 
                          num_threads, output_file, adapter, 
                          skip_mobster=False, mobster_fit_rds=None):
+    if bam_path.lower().endswith('.cram'):
+        num_threads = 1
+
     is_compressed = vcf_path.endswith('.gz')
     has_index = os.path.exists(vcf_path + '.csi') or os.path.exists(vcf_path + '.tbi')
     if not is_compressed:

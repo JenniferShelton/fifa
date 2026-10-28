@@ -16,6 +16,7 @@ VERSION = 2.0
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger('interpret').setLevel(logging.WARNING)
     logger = logging.getLogger(__name__)
 
     parser = ap.ArgumentParser(description='FIFA for Filtering FFPE Artifacts\n'
@@ -45,8 +46,8 @@ if __name__ == '__main__':
                                 help='Path to save output files with variants and all extracted features. (default: current directory)')
     feature_parser.add_argument('-l', '--label', nargs=2, default=[None,None],
                                 help='VCF INFO Field with Variant Label and Real/Truth/1 Label. (default: None, None)')
-    feature_parser.add_argument('--skip-mobster', action='store_true',
-                                help='Skip running MOBSTER and omit the Tail score from the extracted feature table.')
+    feature_parser.add_argument('--run-mobster', action='store_true',
+                                help='Run MOBSTER and include the Tail score in the extracted feature table.')
     feature_parser.add_argument('--mobster-fit-rds', default=None,
                                 help='Path to precomputed MOBSTER fit .rds file. If provided, fitting step is skipped and this fit is used.')
     
@@ -106,7 +107,7 @@ if __name__ == '__main__':
                                       sample=args.sample, cohort=args.cohort, 
                                       adapter=args.adapter,
                                       vcf_file=args.vcffile, bam_file=args.bamfile, 
-                                      ref_seq=args.refseq, skip_mobster=args.skip_mobster,
+                                      ref_seq=args.refseq, skip_mobster=not args.run_mobster,
                                       mobster_fit_rds=args.mobster_fit_rds)
         # except Exception as e:
         #     logger.error(f"An error occurred: {e}")

@@ -43,16 +43,19 @@ workflow PredictionWkf {
         String qos = "compbio"
         String partition = "cpu"
         String cpuPlatform = "Intel Cascade Lake"
-        Int maxSplits = 5
+        Int maxSplits = 10
         Int minSplits = 2
     }
-     gather split VCF filenames to avoid glob that can fail on prem
+    # gather split VCF filenames to avoid glob that can fail on prem
     Int count = 100
     scatter (i in range(count + 1)) {
         Int num = i + 1
         String suffixes = "${num}"
     }
-    String prefix = "~{sampleId}.fifa."
+    String pairId = sub(basename(vcf.vcf, ".gz"), "\\..*$", "")
+    String tumorId = sub(pairId, "^.*--", "")
+    String normalId = sub(pairId, "--.*$", "")
+    String prefix = "~{pairId}.fifa."
     String additionalSuffix = ".vcf"
     scatter (index in range(length(suffixes))) {
         String suffix = suffixes[index]
@@ -75,7 +78,7 @@ workflow PredictionWkf {
                 tumor = tumorId,
                 normal = normalId,
                 rawVcf = splitVcf,
-                orderedVcfPath = "~{sampleId}.renamedColumns.vcf",
+                orderedVcfPath = "~{pairId}.renamedColumns.vcf",
                 memoryGb = 4,
                 diskSize = 10
         }
@@ -111,9 +114,9 @@ workflow PredictionWkf {
         input:
             tempVcfs = fifaVcfRun,
             referenceFa = referenceFa,
-            sortedVcfPath = "~{sampleId}.fifa.vcf"
+            sortedVcfPath = "~{pairId}.fifa.vcf"
     }
     output {
-        File fifaVcf = Gatk4MergeSortVcf.sortedVcf
+        File fifaVcf = Gatk4MergeSortVcf.sortedVcf.vcf
     }
 }
