@@ -1,5 +1,6 @@
 import os
 import pickle
+import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -153,9 +154,18 @@ def scale_features(variants):
         variants[col] = variants.groupby('Sample')[col].transform(
     	    lambda x: (x - np.nanmean(x)) / np.nanstd(x) if np.nanstd(x) > 1e-9 else 0.0
     	)
-
-    # variants.drop(features_to_scale, axis=1, inplace=True)
     return variants
+
+
+def write_prediction_csv(predictions: pd.DataFrame, vcf_path: str) -> None:
+    csv_path = re.sub(r'\.fifa\.vcf$', '.fifa.csv', vcf_path)
+    feature_columns = predictions.drop(
+        columns=['Predicted', 'Probability'], errors='ignore'
+    ).copy()
+    feature_columns['FIFA_LABEL'] = predictions['Predicted'].to_numpy()
+    feature_columns['FIFA_PROB'] = predictions['Probability'].to_numpy()
+    feature_columns.to_csv(csv_path, index=False)
+
 
 def load_variants(directory, labels_path):
     ## Need to check that features are being saved with _extracted_features.csv suffix

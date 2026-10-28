@@ -21,7 +21,6 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 from scipy.stats.mstats import winsorize
 from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, balanced_accuracy_score, f1_score, recall_score
@@ -42,6 +41,7 @@ from helper_funcs import (
     convert_hot_encodings,
     scale_features,
     select_model_features,
+    write_prediction_csv,
 )
 import logging
 from typing import Any, List, Set
@@ -60,7 +60,7 @@ def normalize_variant_key(variant_key: str) -> str:
     return f'{parts[0]}:{parts[1]}_{parts[2]}>{parts[3]}'
 
 
-def make_predictions(ebm, variants):
+def make_predictions(ebm: Any, variants: pd.DataFrame) -> pd.DataFrame:
     """
     Scale features, and make predictions on the variants. 
 
@@ -69,30 +69,25 @@ def make_predictions(ebm, variants):
         variants (pd.DataFrame): data frame with variants and all features
 
     """   
-    label_encoder = LabelEncoder() 
-
-    if 'Label' in variants.columns:
-        y_test = label_encoder.fit_transform(variants['Label'].apply(lambda x: 1 if x == 'Real' else 0))
-        variants.drop(columns='Label', inplace=True)
+    feature_rows = variants.drop(columns=['Label'], errors='ignore').copy()
+    model_variants = feature_rows.copy()
 
     ## Small check to make sure that I converted the hot-encondings we were originally using 
     ## to the sequence context features 
-    if 'hot_encoded_ref_base' in variants.columns:
-        variants = convert_hot_encodings(variants)
+    if 'hot_encoded_ref_base' in model_variants.columns:
+        model_variants = convert_hot_encodings(model_variants)
     
     # Transform features 
-    variants = scale_features(variants)
+    model_variants = scale_features(model_variants)
     
-    variant_ids_test = variants[['Sample', 'Variant', 'Cohort']].reset_index(drop=True)
-
-    X_test = variants.drop(['Sample', 'Variant', 'Cohort'], axis=1)
-    del variants 
+    X_test = model_variants.drop(['Sample', 'Variant', 'Cohort'], axis=1)
 
     X_test = select_model_features(ebm.feature_names_in_, X_test)
 
     y_pred = pd.DataFrame(ebm.predict(X_test), columns=['Predicted'])
     y_probs = pd.DataFrame(ebm.predict_proba(X_test)[:, 1], columns=['Probability'])
-    predictions = pd.concat([variant_ids_test, y_pred, y_probs], axis=1)
+    scored_features = feature_rows.loc[model_variants.index].reset_index(drop=True)
+    predictions = pd.concat([scored_features, y_pred, y_probs], axis=1)
     return predictions
 
 def generate_output_vcf_file(predictions, vcf_path): 
@@ -151,6 +146,7 @@ def generate_output_vcf_file(predictions, vcf_path):
 
     vcf_out.close()
     origvcf.close()
+    write_prediction_csv(predictions, outpath)
     logger.info(f"Successfully generated: {outpath}")
 
 def parse_pairs_path(pairs_path, combined_df): 
