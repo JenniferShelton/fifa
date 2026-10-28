@@ -76,6 +76,15 @@ workflow PredictionWkf {
     }
 
     File extractedFeaturesRun = select_first([Extraction.extractedFeatures, ExtractionMobsterFree.extractedFeatures]) 
+    call fifa.Merge {
+        input:
+            pickles = models,
+            mergedModelId = sampleId,
+            modelPath = "~{sampleId}.merged.pkl",
+            qos = qos,
+            partition = partition,
+            cpuPlatform = cpuPlatform
+    }
 
     if (defined(optionalRnaFile)) {
         call fifa.PredictionWithRna {
@@ -83,7 +92,7 @@ workflow PredictionWkf {
                 sampleId = sampleId,
                 vcf = vcf,
                 extractedFeatures = extractedFeaturesRun,
-                models = models,
+                model = Merge.model,
                 optionalRnaFile = optionalRnaFile
         }
     }
@@ -94,7 +103,7 @@ workflow PredictionWkf {
                 sampleId = sampleId,
                 vcf = vcf,
                 extractedFeatures = extractedFeaturesRun,
-                models = models
+                model = Merge.model
         }
     }
     File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])

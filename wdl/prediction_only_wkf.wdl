@@ -55,6 +55,15 @@ workflow PredictionWkf {
     String pairId = sub(basename(vcf.vcf, ".gz"), "\\..*$", "")
     String tumorId = sub(pairId, "^.*--", "")
     String normalId = sub(pairId, "--.*$", "")
+    call fifa.Merge {
+        input:
+            pickles = models,
+            mergedModelId = pairId,
+            modelPath = "~{pairId}.merged.pkl",
+            qos = qos,
+            partition = partition,
+            cpuPlatform = cpuPlatform
+    }
     String prefix = "~{pairId}.fifa."
     String additionalSuffix = ".vcf"
     scatter (index in range(length(suffixes))) {
@@ -95,7 +104,7 @@ workflow PredictionWkf {
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     extractedFeatures = extractedFeatures,
                     fifaCsvPath = "~{pairId}.fifa.csv",
-                    models = models,
+                    model = Merge.model,
                     optionalRnaFile = optionalRnaFile
             }
         }
@@ -107,7 +116,7 @@ workflow PredictionWkf {
                     vcf = CompressIndexVcf.vcfCompressedIndexed,
                     extractedFeatures = extractedFeatures,
                     fifaCsvPath = "~{pairId}.fifa.csv",
-                    models = models
+                    model = Merge.model
             }
         }
         File fifaVcfRun = select_first([PredictionWithRna.fifaVcf, Prediction.fifaVcf])

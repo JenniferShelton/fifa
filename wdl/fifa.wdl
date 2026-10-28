@@ -987,7 +987,7 @@ task Prediction {
         String fifaVcfPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.vcf")
         String fifaCsvPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.csv")
         String generatedFifaCsvPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.csv")
-        Array[File] models
+        File model
         # resources
         Int threads = 1
         Int runRequestThreads =  ceil(threads / 2.0)
@@ -1003,14 +1003,13 @@ task Prediction {
         sampleId="~{sampleId}"
         vcf="~{vcf.vcf}"
         extractedFeatures="~{extractedFeatures}"
-        all_models="~{sep=' ' models}"
         python3 /opt/fifa/src/cli.py \
             predict \
             -s ${sampleId} \
             -v ${vcf} \
             -f ${extractedFeatures} \
             -o . \
-            -m ${all_models}
+            -m ${model}
         if [ "~{generatedFifaCsvPath}" != "~{fifaCsvPath}" ]; then
             mv "~{generatedFifaCsvPath}" "~{fifaCsvPath}"
         fi
@@ -1043,7 +1042,7 @@ task PredictionWithRna {
         String fifaVcfPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.vcf")
         String fifaCsvPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.csv")
         String generatedFifaCsvPath = sub(basename(vcf.vcf, ".gz"), ".vcf$", ".fifa.csv")
-        Array[File] models
+        File model
         File? optionalRnaFile
         # resources
         Int threads = 4
@@ -1060,7 +1059,6 @@ task PredictionWithRna {
         sampleId="~{sampleId}"
         vcf="~{vcf.vcf}"
         extractedFeatures="~{extractedFeatures}"
-        all_models="~{sep=' ' models}"
         all_rna="~{sep=' ' optionalRnaFile}"
         python3 /opt/fifa/src/cli.py \
             predict \
@@ -1068,7 +1066,7 @@ task PredictionWithRna {
             -v ${vcf} \
             -f ${extractedFeatures} \
             -o . \
-            -m ${all_models} \
+            -m ${model} \
             -r ${all_rna}
         if [ "~{generatedFifaCsvPath}" != "~{fifaCsvPath}" ]; then
             mv "~{generatedFifaCsvPath}" "~{fifaCsvPath}"

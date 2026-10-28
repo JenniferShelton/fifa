@@ -85,9 +85,9 @@ if __name__ == '__main__':
                                     help='Paths to CSV files with features for each variant', required=True)
     predict_parser.add_argument('-o', '--output_dir', default=os.getcwd(), 
                                 help='Directory to save VCFs with model predictions. (default: current directory)')
-    predict_parser.add_argument('-m', '--model_files', nargs='+', 
-                                help='Path file(s) of EBM models to be used. '
-                                '(If submitting multiple models, they will be merged.)', required=True)
+    predict_parser.add_argument('-m', '--model_file',
+                                help='Path to one EBM model to use for prediction.',
+                                required=True)
     predict_parser.add_argument('-r', '--rna_annotations', default=None, 
                                 help='Path to file with RNA annotations', required=False)
     
@@ -122,8 +122,7 @@ if __name__ == '__main__':
         
     elif args.subcommand == 'predict':
         logger.info('Classify variants in a VCF')
-        model_files = list(args.model_files)
-        ebm = load_models(model_files)
+        ebm = load_models([args.model_file])
         if(args.rna_annotations):
             logger.info('Will include RNA annotations (for rescuing FN predictions)')
             predict_with_rna(extracted_features_paths=args.features_path, outpath=args.output_dir, 
